@@ -1,0 +1,10 @@
+services:
+  rust:
+    build:
+      type: bazel
+      targets:
+        search-api: search-api:image-image
+        comments-api: comments-api:api-image
+    artifacts:
+      - name: search-api
+      - name: comments-api
