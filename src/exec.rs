@@ -3,7 +3,7 @@ use std::{
     sync::Arc,
 };
 
-use prodash::Progress;
+use prodash::{Progress, Unit};
 use tokio::{
     io::AsyncReadExt,
     process::{Child, ChildStderr, ChildStdout, Command},
@@ -55,6 +55,7 @@ where
     P: Progress + 'static,
 {
     let progress = Arc::new(progress);
+
     let mut child = spawn(cmd).await?;
 
     progress::proxy_stdio(child.stdout, Arc::clone(&progress));

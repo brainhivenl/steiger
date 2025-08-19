@@ -91,7 +91,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             let root = progress::tree();
             let handle = progress::setup_line_renderer(&root);
             let builder = MetaBuild::new(Arc::new(config));
-            let output = builder.build(Arc::clone(&root), platform).await?;
+            let output = builder.build(root.add_child("build"), platform).await?;
 
             match repo {
                 Some(repo) => {

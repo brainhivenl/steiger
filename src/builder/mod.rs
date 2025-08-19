@@ -2,13 +2,9 @@ use crate::{
     builder::bazel::BazelBuilder,
     config::{Build, Config},
     image::Image,
-    progress,
 };
 
-use prodash::{
-    messages::MessageLevel,
-    tree::{Item, Root},
-};
+use prodash::{messages::MessageLevel, tree::Item};
 use tokio::task::JoinSet;
 
 mod bazel;
@@ -76,15 +72,15 @@ impl MetaBuild {
         }
     }
 
-    pub async fn build(mut self, root: Arc<Root>, platform: String) -> Result<Output, BuildError> {
+    pub async fn build(mut self, mut pb: Item, platform: String) -> Result<Output, BuildError> {
         let config = Arc::clone(&self.config);
         let mut set = JoinSet::default();
 
-        root.add_child("meta")
-            .message(MessageLevel::Info, format!("detected platform: {platform}"));
+        pb.init(Some(config.services.len()), None);
+        pb.message(MessageLevel::Info, format!("detected platform: {platform}"));
 
         for (name, service) in config.services.iter() {
-            let progress = root.add_child(name);
+            let progress = pb.add_child(name);
 
             match &service.build {
                 Build::Bazel(bazel) => {
@@ -99,6 +95,7 @@ impl MetaBuild {
         let mut output = Output::default();
 
         for result in set.join_all().await {
+            pb.inc();
             output.merge(result?);
         }
 
