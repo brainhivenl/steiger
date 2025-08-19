@@ -5,7 +5,10 @@ use crate::{
     progress,
 };
 
-use prodash::tree::{Item, Root};
+use prodash::{
+    messages::MessageLevel,
+    tree::{Item, Root},
+};
 use tokio::task::JoinSet;
 
 mod bazel;
@@ -40,6 +43,7 @@ pub trait Builder: Clone {
         self,
         progress: Item,
         service_name: String,
+        platform: String,
         input: Self::Input,
     ) -> Result<Output, Self::Error>;
 }
@@ -72,9 +76,12 @@ impl MetaBuild {
         }
     }
 
-    pub async fn build(mut self, root: Arc<Root>) -> Result<Output, BuildError> {
+    pub async fn build(mut self, root: Arc<Root>, platform: String) -> Result<Output, BuildError> {
         let config = Arc::clone(&self.config);
         let mut set = JoinSet::default();
+
+        root.add_child("meta")
+            .message(MessageLevel::Info, format!("detected platform: {platform}"));
 
         for (name, service) in config.services.iter() {
             let progress = root.add_child(name);
@@ -84,7 +91,7 @@ impl MetaBuild {
                     let builder = self.bazel()?;
                     let config = bazel.clone();
 
-                    set.spawn(builder.build(progress, name.to_string(), config));
+                    set.spawn(builder.build(progress, name.to_string(), platform.clone(), config));
                 }
             };
         }

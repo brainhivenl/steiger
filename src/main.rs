@@ -55,11 +55,34 @@ fn parse_host(path: &str) -> &str {
     path.split('/').next().unwrap_or_default()
 }
 
+async fn detect_kube_platform() -> Result<String, Box<dyn Error>> {
+    let client = kube::Client::try_default().await?;
+    let version = client.apiserver_version().await?;
+
+    Ok(version.platform)
+}
+
+async fn detect_platform() -> String {
+    if let Ok(platform) = detect_kube_platform().await {
+        return platform;
+    }
+
+    match (env::consts::OS, env::consts::ARCH) {
+        ("linux", "x86_64") => "linux/amd64".to_string(),
+        ("linux", "aarch64") => "linux/arm64".to_string(),
+        ("macos", "x86_64") => "darwin/amd64".to_string(),
+        ("macos", "aarch64") => "darwin/arm64".to_string(),
+        ("windows", "x86_64") => "windows/amd64".to_string(),
+        _ => unimplemented!("unsupported platform"),
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let opts = Opts::parse();
     let dir = opts.dir.map(Ok).unwrap_or_else(env::current_dir)?;
     let config = read_config_file(opts.config.unwrap_or_else(|| dir.join("steiger.yml"))).await?;
+    let platform = detect_platform().await;
 
     env::set_current_dir(&dir)?;
 
@@ -68,7 +91,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             let root = progress::tree();
             let handle = progress::setup_line_renderer(&root);
             let builder = MetaBuild::new(Arc::new(config));
-            let output = builder.build(Arc::clone(&root)).await?;
+            let output = builder.build(Arc::clone(&root), platform).await?;
 
             match repo {
                 Some(repo) => {

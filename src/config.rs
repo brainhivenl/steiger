@@ -12,6 +12,8 @@ pub struct Config {
 #[serde(rename_all = "camelCase")]
 pub struct Bazel {
     pub targets: HashMap<String, String>,
+    #[serde(default)]
+    pub platforms: HashMap<String, String>,
 }
 
 #[derive(Debug, Deserialize)]

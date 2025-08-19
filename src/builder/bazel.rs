@@ -82,18 +82,23 @@ impl Builder for BazelBuilder {
         self,
         mut pb: Item,
         service_name: String,
+        platform: String,
         input: Self::Input,
     ) -> Result<Output, Self::Error> {
         pb.set_name(service_name);
         pb.message(MessageLevel::Info, "starting builder".to_string());
 
-        let status = exec::run_with_progress(
-            Command::new(&self.binary)
-                .arg("build")
-                .args(input.targets.values()),
-            pb.add_child("bazel"),
-        )
-        .await?;
+        let mut root_cmd = Command::new(&self.binary);
+        let mut cmd = root_cmd.arg("build");
+
+        if let Some(platform) = input.platforms.get(&platform) {
+            cmd = cmd.arg(format!("--platforms={platform}"));
+            pb.message(MessageLevel::Info, format!("using platform: {platform}"));
+        }
+
+        let status =
+            exec::run_with_progress(cmd.args(input.targets.values()), pb.add_child("bazel"))
+                .await?;
 
         if !status.success() {
             pb.message(
