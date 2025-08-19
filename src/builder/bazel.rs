@@ -1,8 +1,6 @@
 use std::{collections::HashMap, path::PathBuf, process::ExitStatus};
 
-use prodash::{
-    NestedProgress, Progress, messages::MessageLevel, progress::DoOrDiscard, tree::Item,
-};
+use prodash::{messages::MessageLevel, tree::Item};
 use tokio::process::Command;
 
 use crate::{
@@ -82,7 +80,7 @@ impl Builder for BazelBuilder {
 
     async fn build(
         self,
-        mut pb: DoOrDiscard<Item>,
+        mut pb: Item,
         service_name: String,
         input: Self::Input,
     ) -> Result<Output, Self::Error> {

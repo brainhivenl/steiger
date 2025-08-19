@@ -5,7 +5,7 @@ use crate::{
     progress,
 };
 
-use prodash::{progress::DoOrDiscard, tree::Item};
+use prodash::tree::{Item, Root};
 use tokio::task::JoinSet;
 
 mod bazel;
@@ -38,7 +38,7 @@ pub trait Builder: Clone {
         Self: Sized;
     async fn build(
         self,
-        progress: DoOrDiscard<Item>,
+        progress: Item,
         service_name: String,
         input: Self::Input,
     ) -> Result<Output, Self::Error>;
@@ -72,15 +72,12 @@ impl MetaBuild {
         }
     }
 
-    pub async fn build(mut self) -> Result<Output, BuildError> {
+    pub async fn build(mut self, root: Arc<Root>) -> Result<Output, BuildError> {
         let config = Arc::clone(&self.config);
-        let root = progress::tree();
         let mut set = JoinSet::default();
-        let handle = progress::setup_line_renderer(&root);
 
         for (name, service) in config.services.iter() {
-            let child = root.add_child(name);
-            let progress = DoOrDiscard::from(Some(child));
+            let progress = root.add_child(name);
 
             match &service.build {
                 Build::Bazel(bazel) => {
@@ -97,8 +94,6 @@ impl MetaBuild {
         for result in set.join_all().await {
             output.merge(result?);
         }
-
-        handle.shutdown_and_wait();
 
         Ok(output)
     }

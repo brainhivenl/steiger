@@ -2,10 +2,14 @@ use std::fmt::Debug;
 use std::path::Path;
 
 use oci_distribution::{
-    client::ImageLayer,
+    client::{Config, ImageLayer},
     manifest::{OciImageIndex, OciImageManifest, Platform},
 };
 use serde::de::DeserializeOwned;
+
+use crate::image::blob_store::BlobStore;
+
+mod blob_store;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ImageError {
@@ -16,6 +20,7 @@ pub enum ImageError {
 }
 
 pub struct Image {
+    pub config: Config,
     pub manifest: OciImageManifest,
     pub platform: Option<Platform>,
     pub layers: Vec<ImageLayer>,
@@ -31,28 +36,20 @@ impl Debug for Image {
     }
 }
 
-async fn parse<T: DeserializeOwned>(path: impl AsRef<Path>) -> Result<T, ImageError> {
-    Ok(serde_json::from_slice(&tokio::fs::read(path).await?)?)
-}
-
-fn split_algo_hash(digest: &str) -> (&str, &str) {
-    digest.split_once(':').unwrap_or_default()
-}
-
 pub async fn load_from_path(dir: impl AsRef<Path>) -> Result<Vec<Image>, ImageError> {
     let dir = dir.as_ref();
-    let index: OciImageIndex = parse(dir.join("index.json")).await?;
+    let store = BlobStore::new(dir.to_path_buf());
+    let index =
+        serde_json::from_slice::<OciImageIndex>(&tokio::fs::read(dir.join("index.json")).await?)?;
     let mut images = vec![];
-    let blob_dir = dir.join("blobs");
 
     for entry in index.manifests {
-        let (alg, hash) = split_algo_hash(&entry.digest);
-        let manifest: OciImageManifest = parse(blob_dir.join(alg).join(hash)).await?;
+        let manifest =
+            serde_json::from_slice::<OciImageManifest>(&store.read_blob(&entry.digest).await?)?;
         let mut layers = vec![];
 
         for layer in manifest.layers.iter() {
-            let (alg, hash) = split_algo_hash(&layer.digest);
-            let data = tokio::fs::read(blob_dir.join(alg).join(hash)).await?;
+            let data = store.read_blob(&layer.digest).await?;
 
             layers.push(ImageLayer::new(
                 data,
@@ -61,10 +58,18 @@ pub async fn load_from_path(dir: impl AsRef<Path>) -> Result<Vec<Image>, ImageEr
             ));
         }
 
+        let data = store.read_blob(&manifest.config.digest).await?;
+        let config = Config {
+            data,
+            media_type: manifest.config.media_type.clone(),
+            annotations: manifest.config.annotations.clone(),
+        };
+
         images.push(Image {
             manifest,
             layers,
             platform: entry.platform,
+            config,
         });
     }
 
