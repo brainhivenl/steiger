@@ -1,3 +1,4 @@
+use futures::{StreamExt, TryStreamExt, future, stream};
 use oci_client::{
     Client, Reference,
     client::PushResponse,
@@ -58,21 +59,60 @@ impl Registry {
             }
         }
 
+        progress.init(Some(image.layers.len()), None);
         progress.message(MessageLevel::Info, "pushing image");
 
-        let response = self
+        self.client
+            .store_auth_if_needed(image_ref.resolve_registry(), &self.auth)
+            .await;
+
+        // Push blobs with cache
+        stream::iter(&image.layers)
+            .map(|layer| {
+                let client = self.client.clone();
+                let layer_desc = &image.manifest.layers;
+                let progress = &progress;
+
+                async move {
+                    let digest = layer.sha256_digest();
+                    let desc = layer_desc.iter().find(|l| l.digest == digest).unwrap();
+
+                    match client
+                        .pull_blob_stream_partial(image_ref, desc, 0, Some(1))
+                        .await
+                    {
+                        Ok(_) => {
+                            progress.inc();
+                            Ok(())
+                        }
+                        Err(OciDistributionError::ServerError { code, .. }) if code == 404 => {
+                            client.push_blob(image_ref, &layer.data, &digest).await?;
+                            progress.inc();
+                            Ok(())
+                        }
+                        Err(e) => Err(e.into()),
+                    }
+                }
+            })
+            .boxed() // Workaround to rustc issue https://github.com/rust-lang/rust/issues/104382
+            .buffer_unordered(16)
+            .try_for_each(future::ok::<(), OciDistributionError>)
+            .await?;
+
+        let config_url = self
             .client
-            .push(
-                image_ref,
-                &image.layers,
-                image.config,
-                &self.auth,
-                Some(image.manifest),
-            )
+            .push_blob(image_ref, &image.config.data, &image.manifest.config.digest)
+            .await?;
+        let manifest_url = self
+            .client
+            .push_manifest(image_ref, &image.manifest.into())
             .await?;
 
         progress.message(MessageLevel::Success, "image pushed");
 
-        Ok(Some(response))
+        Ok(Some(PushResponse {
+            config_url,
+            manifest_url,
+        }))
     }
 }
