@@ -1,7 +1,10 @@
 use std::sync::Arc;
 
 use oci_distribution::{
-    Client, Reference, client::PushResponse, errors::OciDistributionError, secrets::RegistryAuth,
+    Client, Reference,
+    client::PushResponse,
+    errors::{OciDistributionError, OciErrorCode},
+    secrets::RegistryAuth,
 };
 use prodash::{messages::MessageLevel, tree::Root};
 
@@ -9,15 +12,8 @@ use crate::image::Image;
 
 #[derive(Debug, thiserror::Error)]
 pub enum PushError {
-    #[error("failed to parse reference")]
-    Parse(#[from] oci_distribution::ParseError),
     #[error("failed to push image")]
     Oci(#[from] OciDistributionError),
-}
-
-pub struct ImageOutput {
-    pub response: Option<PushResponse>,
-    pub reference: Reference,
 }
 
 pub struct Registry {
@@ -45,8 +41,10 @@ impl Registry {
             .await
         {
             Ok(digest) => Ok(Some(digest)),
-            Err(OciDistributionError::ImageManifestNotFoundError(_)) => {
-                // If the manifest is not found, we assume the image does not exist
+            // If the manifest is not found, we assume the image does not exist
+            Err(OciDistributionError::ImageManifestNotFoundError(_)) => Ok(None),
+            // If the manifest is unknown, we assume the image does not exist
+            Err(OciDistributionError::RegistryError { envelope, .. }) if matches!(envelope.errors.first(), Some(e) if e.code == OciErrorCode::ManifestUnknown) => {
                 Ok(None)
             }
             Err(e) => Err(e),
@@ -55,24 +53,18 @@ impl Registry {
 
     pub async fn push(
         &self,
-        repo: &str,
         artifact: &str,
+        image_ref: &Reference,
         image: Image,
-    ) -> Result<ImageOutput, PushError> {
-        let reference = Reference::try_from(format!("{repo}/{artifact}:latest"))?;
+    ) -> Result<Option<PushResponse>, PushError> {
         let progress = self.progress.add_child(format!("{artifact} › push"));
 
-        if let Some(digest) = self.try_resolve_digest(&reference).await? {
-            progress.message(MessageLevel::Info, "image already exists, skipping push");
-
-            return Ok(ImageOutput {
-                response: None,
-                reference: Reference::with_digest(
-                    reference.registry().to_string(),
-                    reference.repository().to_string(),
-                    digest,
-                ),
-            });
+        if let Some(digest) = self.try_resolve_digest(image_ref).await? {
+            // If the digest matches the image's digest, we can skip pushing
+            if digest == image.digest {
+                progress.message(MessageLevel::Info, "image already exists, skipping push");
+                return Ok(None);
+            }
         }
 
         progress.message(MessageLevel::Info, "pushing image");
@@ -80,7 +72,7 @@ impl Registry {
         let response = self
             .client
             .push(
-                &reference,
+                image_ref,
                 &image.layers,
                 image.config,
                 &self.auth,
@@ -90,9 +82,6 @@ impl Registry {
 
         progress.message(MessageLevel::Success, "image pushed");
 
-        Ok(ImageOutput {
-            reference,
-            response: Some(response),
-        })
+        Ok(Some(response))
     }
 }

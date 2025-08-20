@@ -16,6 +16,7 @@ mod exec;
 mod image;
 mod progress;
 mod registry;
+mod tag;
 
 #[derive(Parser)]
 struct Opts {

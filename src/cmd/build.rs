@@ -1,7 +1,7 @@
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use docker_credential::{CredentialRetrievalError, DockerCredential};
-use oci_distribution::{Client, client::ClientConfig, secrets::RegistryAuth};
+use oci_distribution::{Client, Reference, client::ClientConfig, secrets::RegistryAuth};
 use tokio::fs;
 
 use crate::{
@@ -9,6 +9,7 @@ use crate::{
     config::Config,
     parse_host, progress,
     registry::{PushError, Registry},
+    tag::{self, TagError},
 };
 
 mod skaffold {
@@ -38,6 +39,8 @@ pub enum WriteError {
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    #[error("failed to tag")]
+    Tag(#[from] TagError),
     #[error("failed to build")]
     Build(#[from] BuildError),
     #[error("failed to push")]
@@ -46,6 +49,8 @@ pub enum Error {
     WriteOutput(#[from] WriteError),
     #[error("failed to retrieve registry credentials")]
     Credential(#[from] CredentialRetrievalError),
+    #[error("failed to parse reference")]
+    Parse(#[from] oci_distribution::ParseError),
 }
 
 pub async fn run(
@@ -58,6 +63,7 @@ pub async fn run(
     let handle = progress::setup_line_renderer(&root);
     let builder = MetaBuild::new(Arc::new(config));
     let output = builder.build(root.add_child("build"), platform).await?;
+    let tag = tag::resolve().await?;
 
     match repo {
         Some(repo) => {
@@ -73,10 +79,11 @@ pub async fn run(
 
             for (artifact, images) in output.artifacts {
                 for image in images {
-                    artifacts.insert(
-                        artifact.clone(),
-                        registry.push(&repo, &artifact, image).await?,
-                    );
+                    let image_ref = Reference::try_from(format!("{repo}/{artifact}:{tag}"))?;
+                    let output_ref = format!("{repo}/{artifact}:{tag}@{}", image.digest);
+
+                    registry.push(&artifact, &image_ref, image).await?;
+                    artifacts.insert(artifact.clone(), output_ref);
                 }
             }
 
@@ -84,18 +91,15 @@ pub async fn run(
 
             println!("\nPushed artifacts:");
 
-            for (artifact, output) in artifacts.iter() {
-                println!("- {artifact}: {}", output.reference);
+            for (artifact, image_ref) in artifacts.iter() {
+                println!("- {artifact}: {}", image_ref);
             }
 
             if let Some(path) = output_file {
                 let output = skaffold::Output {
                     builds: artifacts
                         .into_iter()
-                        .map(|(artifact, output)| skaffold::Build {
-                            image_name: artifact,
-                            tag: output.reference.to_string(),
-                        })
+                        .map(|(image_name, tag)| skaffold::Build { image_name, tag })
                         .collect(),
                 };
 
