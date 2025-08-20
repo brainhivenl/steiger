@@ -1,18 +1,15 @@
 use std::{
-    collections::HashMap,
     env,
     error::Error,
     path::{Path, PathBuf},
-    sync::Arc,
 };
 
 use clap::Parser;
-use docker_credential::DockerCredential;
-use oci_distribution::{Client, client::ClientConfig, secrets::RegistryAuth};
 
-use crate::{builder::MetaBuild, config::Config, registry::Registry};
+use crate::config::Config;
 
 mod builder;
+mod cmd;
 mod config;
 mod exec;
 mod image;
@@ -34,8 +31,11 @@ struct Opts {
 #[derive(Parser)]
 enum Cmd {
     Build {
-        #[arg(long, help = "OCI registry to use")]
+        #[arg(short, long, help = "OCI registry to use")]
         repo: Option<String>,
+
+        #[arg(short, long, help = "Output file location")]
+        output_file: Option<PathBuf>,
     },
 }
 
@@ -52,7 +52,7 @@ async fn read_config_file(path: impl AsRef<Path>) -> Result<Config, ConfigError>
     Ok(serde_yml::from_slice(&contents)?)
 }
 
-fn parse_host(path: &str) -> &str {
+pub fn parse_host(path: &str) -> &str {
     path.split('/').next().unwrap_or_default()
 }
 
@@ -88,51 +88,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     env::set_current_dir(&dir)?;
 
     match opts.cmd {
-        Cmd::Build { repo } => {
-            let root = progress::tree();
-            let handle = progress::setup_line_renderer(&root);
-            let builder = MetaBuild::new(Arc::new(config));
-            let output = builder.build(root.add_child("build"), platform).await?;
-
-            match repo {
-                Some(repo) => {
-                    let host = parse_host(&repo);
-                    let auth = match docker_credential::get_credential(host)? {
-                        DockerCredential::IdentityToken(_) => unimplemented!(),
-                        DockerCredential::UsernamePassword(user, pass) => {
-                            RegistryAuth::Basic(user, pass)
-                        }
-                    };
-
-                    let client = Client::new(ClientConfig::default());
-                    let registry = Registry::new(Arc::clone(&root), client, auth);
-                    let mut artifacts = HashMap::new();
-
-                    for (artifact, images) in output.artifacts {
-                        for image in images {
-                            artifacts.insert(
-                                artifact.clone(),
-                                registry.push(&repo, &artifact, image).await?,
-                            );
-                        }
-                    }
-
-                    handle.shutdown_and_wait();
-
-                    println!("\nPushed artifacts:");
-
-                    for (artifact, output) in artifacts {
-                        println!("- {artifact}: {}", output.reference);
-                    }
-
-                    Ok(())
-                }
-                None => {
-                    handle.shutdown_and_wait();
-                    println!("no repo set, skipping push");
-                    Ok(())
-                }
-            }
+        Cmd::Build { repo, output_file } => {
+            cmd::build::run(config, platform, repo, output_file).await
         }
     }
 }
