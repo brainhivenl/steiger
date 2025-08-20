@@ -13,9 +13,9 @@ mod docker;
 
 #[derive(Debug, thiserror::Error)]
 pub enum BuildError {
-    #[error("docker error: {0}")]
+    #[error("docker error")]
     Docker(#[from] ErrorOf<DockerBuilder>),
-    #[error("bazel error: {0}")]
+    #[error("bazel error")]
     Bazel(#[from] ErrorOf<BazelBuilder>),
 }
 

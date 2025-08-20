@@ -12,19 +12,19 @@ use crate::{
 
 #[derive(Debug, thiserror::Error)]
 pub enum BazelError {
-    #[error("failed to find bazel binary: {0}")]
+    #[error("failed to find bazel binary")]
     Path(#[from] which::Error),
-    #[error("IO error: {0}")]
+    #[error("IO error")]
     IO(#[from] std::io::Error),
     #[error("failed to run 'bazel build': {0:?}")]
     Build(ExitStatus),
-    #[error("failed to parse image: {0}")]
+    #[error("failed to parse image")]
     Image(#[from] image::ImageError),
-    #[error("failed to query for output: {0}")]
+    #[error("failed to query for output")]
     Exit(#[from] ExitError),
-    #[error("failed to deserialize cquery output: {0}")]
+    #[error("failed to deserialize cquery output")]
     Serde(#[from] serde_json::Error),
-    #[error("unable to find artifact for target: {0}")]
+    #[error("unable to find artifact for target")]
     MissingArtifact(String),
 }
 

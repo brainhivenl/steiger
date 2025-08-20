@@ -9,9 +9,9 @@ use crate::image::Image;
 
 #[derive(Debug, thiserror::Error)]
 pub enum PushError {
-    #[error("failed to parse reference: {0}")]
+    #[error("failed to parse reference")]
     Parse(#[from] oci_distribution::ParseError),
-    #[error("failed to push image: {0}")]
+    #[error("failed to push image")]
     Oci(#[from] OciDistributionError),
 }
 

@@ -5,6 +5,7 @@ use std::{
 };
 
 use clap::Parser;
+use miette::Diagnostic;
 
 use crate::config::Config;
 
@@ -36,14 +37,17 @@ enum Cmd {
 
         #[arg(short, long, help = "Output file location")]
         output_file: Option<PathBuf>,
+
+        #[arg(long)]
+        platform: Option<String>,
     },
 }
 
 #[derive(Debug, thiserror::Error)]
 enum ConfigError {
-    #[error("I/O error: {0}")]
+    #[error("I/O error")]
     IO(#[from] std::io::Error),
-    #[error("failed to deserialize: {0}")]
+    #[error("failed to deserialize")]
     Yaml(#[from] serde_yml::Error),
 }
 
@@ -78,18 +82,52 @@ async fn detect_platform() -> String {
     }
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
-    let opts = Opts::parse();
-    let dir = opts.dir.map(Ok).unwrap_or_else(env::current_dir)?;
-    let config = read_config_file(opts.config.unwrap_or_else(|| dir.join("steiger.yml"))).await?;
-    let platform = detect_platform().await;
+#[derive(Debug, Diagnostic, thiserror::Error)]
+enum AppError {
+    #[error("failed to read config")]
+    Config(#[from] ConfigError),
+    #[error("failed to build")]
+    Build(#[from] cmd::build::Error),
+    #[error("failed to get current dir")]
+    CurrentDir(std::io::Error),
+    #[error("failed to set current dir")]
+    SetCurrentDir(std::io::Error),
+}
 
-    env::set_current_dir(&dir)?;
+async fn run(opts: Opts) -> Result<(), AppError> {
+    let dir = opts
+        .dir
+        .map(Ok)
+        .unwrap_or_else(env::current_dir)
+        .map_err(AppError::CurrentDir)?;
+    let config = read_config_file(opts.config.unwrap_or_else(|| dir.join("steiger.yml"))).await?;
+    let detected_platform = detect_platform().await;
+
+    env::set_current_dir(&dir).map_err(AppError::SetCurrentDir)?;
 
     match opts.cmd {
-        Cmd::Build { repo, output_file } => {
-            cmd::build::run(config, platform, repo, output_file).await
+        Cmd::Build {
+            repo,
+            output_file,
+            platform,
+        } => {
+            cmd::build::run(
+                config,
+                platform.unwrap_or(detected_platform),
+                repo,
+                output_file,
+            )
+            .await?;
         }
     }
+
+    Ok(())
+}
+
+#[tokio::main]
+async fn main() -> miette::Result<()> {
+    let opts = Opts::parse();
+    run(opts).await?;
+
+    Ok(())
 }

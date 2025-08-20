@@ -15,9 +15,9 @@ mod blob_store;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ImageError {
-    #[error("IO error: {0}")]
+    #[error("IO error")]
     IO(#[from] std::io::Error),
-    #[error("failed to (de)serialize: {0}")]
+    #[error("failed to (de)serialize")]
     Serde(#[from] serde_json::Error),
 }
 

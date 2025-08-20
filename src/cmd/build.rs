@@ -1,10 +1,15 @@
-use std::{collections::HashMap, error::Error, path::PathBuf, sync::Arc};
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
-use docker_credential::DockerCredential;
+use docker_credential::{CredentialRetrievalError, DockerCredential};
 use oci_distribution::{Client, client::ClientConfig, secrets::RegistryAuth};
 use tokio::fs;
 
-use crate::{builder::MetaBuild, config::Config, parse_host, progress, registry::Registry};
+use crate::{
+    builder::{BuildError, MetaBuild},
+    config::Config,
+    parse_host, progress,
+    registry::{PushError, Registry},
+};
 
 mod skaffold {
     use serde::Serialize;
@@ -23,12 +28,32 @@ mod skaffold {
     }
 }
 
+#[derive(Debug, thiserror::Error)]
+pub enum WriteError {
+    #[error("failed to write to file")]
+    IO(#[from] std::io::Error),
+    #[error("failed to serialize output")]
+    Serde(#[from] serde_json::Error),
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error("failed to build")]
+    Build(#[from] BuildError),
+    #[error("failed to push")]
+    Push(#[from] PushError),
+    #[error("failed to write output")]
+    WriteOutput(#[from] WriteError),
+    #[error("failed to retrieve registry credentials")]
+    Credential(#[from] CredentialRetrievalError),
+}
+
 pub async fn run(
     config: Config,
     platform: String,
     repo: Option<String>,
     output_file: Option<PathBuf>,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<(), Error> {
     let root = progress::tree();
     let handle = progress::setup_line_renderer(&root);
     let builder = MetaBuild::new(Arc::new(config));
@@ -74,7 +99,8 @@ pub async fn run(
                         .collect(),
                 };
 
-                fs::write(path, serde_json::to_vec(&output)?).await?;
+                let data = serde_json::to_vec(&output).map_err(WriteError::Serde)?;
+                fs::write(path, data).await.map_err(WriteError::IO)?;
             }
 
             Ok(())

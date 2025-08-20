@@ -66,7 +66,7 @@ where
 
 #[derive(Debug, thiserror::Error)]
 pub enum ExitError {
-    #[error("IO error: {0}")]
+    #[error("IO error")]
     IO(#[from] std::io::Error),
     #[error("command failed with code '{code}': {stderr}")]
     Status { code: i32, stderr: String },
