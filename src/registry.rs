@@ -1,12 +1,7 @@
 use std::sync::Arc;
 
-use oci_distribution::{
-    Client, Reference, RegistryOperation, errors::OciDistributionError, secrets::RegistryAuth,
-};
-use prodash::{
-    messages::MessageLevel,
-    tree::{Item, Root},
-};
+use oci_distribution::{Client, Reference, errors::OciDistributionError, secrets::RegistryAuth};
+use prodash::{messages::MessageLevel, tree::Root};
 
 use crate::image::Image;
 
@@ -48,7 +43,7 @@ impl Registry {
         let reference = Reference::try_from(format!("{repo}/{artifact}:latest"))?;
         let progress = self.progress.add_child(format!("pushing {artifact}"));
 
-        progress.message(MessageLevel::Info, format!("pushing image"));
+        progress.message(MessageLevel::Info, "pushing image");
 
         let response = self
             .client
@@ -61,7 +56,7 @@ impl Registry {
             )
             .await?;
 
-        progress.message(MessageLevel::Success, format!("image pushed"));
+        progress.message(MessageLevel::Success, "image pushed");
 
         Ok(ImageOutput {
             config_url: response.config_url,

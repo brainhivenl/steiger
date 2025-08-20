@@ -3,7 +3,7 @@ use std::{
     sync::Arc,
 };
 
-use prodash::{Progress, Unit};
+use prodash::Progress;
 use tokio::{
     io::AsyncReadExt,
     process::{Child, ChildStderr, ChildStdout, Command},

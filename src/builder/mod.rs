@@ -1,16 +1,20 @@
 use crate::{
-    builder::bazel::BazelBuilder,
+    builder::{bazel::BazelBuilder, docker::DockerBuilder},
     config::{Build, Config},
     image::Image,
 };
 
+use futures::TryFutureExt;
 use prodash::{messages::MessageLevel, tree::Item};
 use tokio::task::JoinSet;
 
 mod bazel;
+mod docker;
 
 #[derive(Debug, thiserror::Error)]
 pub enum BuildError {
+    #[error("docker error: {0}")]
+    Docker(#[from] ErrorOf<DockerBuilder>),
     #[error("bazel error: {0}")]
     Bazel(#[from] ErrorOf<BazelBuilder>),
 }
@@ -51,6 +55,7 @@ use std::{collections::HashMap, sync::Arc};
 pub struct MetaBuild {
     config: Arc<Config>,
     bazel: Option<BazelBuilder>,
+    docker: Option<DockerBuilder>,
 }
 
 impl MetaBuild {
@@ -58,6 +63,18 @@ impl MetaBuild {
         Self {
             config,
             bazel: None,
+            docker: None,
+        }
+    }
+
+    fn docker(&mut self) -> Result<DockerBuilder, BuildError> {
+        match self.docker.clone() {
+            Some(builder) => Ok(builder),
+            None => {
+                let builder = DockerBuilder::try_init()?;
+                self.docker = Some(builder.clone());
+                Ok(builder)
+            }
         }
     }
 
@@ -87,7 +104,21 @@ impl MetaBuild {
                     let builder = self.bazel()?;
                     let config = bazel.clone();
 
-                    set.spawn(builder.build(progress, name.to_string(), platform.clone(), config));
+                    set.spawn(
+                        builder
+                            .build(progress, name.to_string(), platform.clone(), config)
+                            .map_err(BuildError::Bazel),
+                    );
+                }
+                Build::Docker(docker) => {
+                    let builder = self.docker()?;
+                    let config = docker.clone();
+
+                    set.spawn(
+                        builder
+                            .build(progress, name.to_string(), platform.clone(), config)
+                            .map_err(BuildError::Docker),
+                    );
                 }
             };
         }

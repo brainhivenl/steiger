@@ -111,14 +111,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
                             registry.push(&repo, &artifact, image).await?;
                         }
                     }
+
+                    handle.shutdown_and_wait();
+                    Ok(())
                 }
                 None => {
+                    handle.shutdown_and_wait();
                     println!("no repo set, skipping push");
+                    Ok(())
                 }
             }
-
-            handle.shutdown_and_wait();
-            Ok(())
         }
     }
 }

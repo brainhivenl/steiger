@@ -1,6 +1,6 @@
 use std::{collections::HashMap, path::PathBuf, process::ExitStatus};
 
-use prodash::{messages::MessageLevel, tree::Item};
+use prodash::messages::MessageLevel;
 use tokio::process::Command;
 
 use crate::{
@@ -80,30 +80,30 @@ impl Builder for BazelBuilder {
 
     async fn build(
         self,
-        mut pb: Item,
+        mut progress: prodash::tree::Item,
         service_name: String,
         platform: String,
         input: Self::Input,
     ) -> Result<Output, Self::Error> {
-        pb.set_name(&service_name);
-        pb.message(MessageLevel::Info, "starting builder".to_string());
+        progress.set_name(&service_name);
+        progress.message(MessageLevel::Info, "starting builder");
 
         let mut root_cmd = Command::new(&self.binary);
         let mut cmd = root_cmd.arg("build");
 
         if let Some(platform) = input.platforms.get(&platform) {
             cmd = cmd.arg(format!("--platforms={platform}"));
-            pb.message(MessageLevel::Info, format!("using platform: {platform}"));
+            progress.message(MessageLevel::Info, format!("using platform: {platform}"));
         }
 
         let status = exec::run_with_progress(
             cmd.args(input.targets.values()),
-            pb.add_child(format!("{service_name}/bazel")),
+            progress.add_child(format!("{service_name} › bazel")),
         )
         .await?;
 
         if !status.success() {
-            pb.message(
+            progress.message(
                 MessageLevel::Failure,
                 format!(
                     "build failed with exit code: {}",
@@ -114,8 +114,8 @@ impl Builder for BazelBuilder {
             return Err(BazelError::Build(status));
         }
 
-        pb.message(MessageLevel::Success, "build finished".to_string());
-        pb.message(MessageLevel::Info, "gathering output".to_string());
+        progress.message(MessageLevel::Success, "build finished".to_string());
+        progress.message(MessageLevel::Info, "gathering output".to_string());
 
         let cquery = self.get_files_output(input.targets.values()).await?;
         let mut artifacts = HashMap::default();

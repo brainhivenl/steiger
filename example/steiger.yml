@@ -4,5 +4,3 @@ services:
       type: bazel
       targets:
         search-api: search-api:image-image
-    artifacts:
-      - name: search-api

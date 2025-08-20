@@ -5,7 +5,6 @@ use oci_distribution::{
     client::{Config, ImageLayer},
     manifest::{OciImageIndex, OciImageManifest, Platform},
 };
-use serde::de::DeserializeOwned;
 
 use crate::image::blob_store::BlobStore;
 
