@@ -25,7 +25,6 @@ pub fn setup_line_renderer(progress: &Arc<Root>) -> JoinHandle {
         prodash::render::line::Options {
             frames_per_second: 6.0,
             initial_delay: None,
-            throughput: true,
             hide_cursor: false,
             ..prodash::render::line::Options::default()
         }

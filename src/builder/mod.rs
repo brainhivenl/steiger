@@ -6,7 +6,7 @@ use crate::{
 
 use futures::TryFutureExt;
 use prodash::{messages::MessageLevel, tree::Item};
-use tokio::task::JoinSet;
+use tokio::{task::JoinSet, time::Instant};
 
 mod bazel;
 mod docker;
@@ -90,6 +90,7 @@ impl MetaBuild {
     }
 
     pub async fn build(mut self, mut pb: Item, platform: String) -> Result<Output, BuildError> {
+        let instant = Instant::now();
         let config = Arc::clone(&self.config);
         let mut set = JoinSet::default();
 
@@ -129,6 +130,13 @@ impl MetaBuild {
             pb.inc();
             output.merge(result?);
         }
+
+        let elapsed = instant.elapsed();
+
+        pb.message(
+            MessageLevel::Info,
+            format!("build completed in {:?}", elapsed),
+        );
 
         Ok(output)
     }
