@@ -5,6 +5,9 @@ use oci_distribution::{
     client::{Config, ImageLayer},
     manifest::{OciImageIndex, OciImageManifest, Platform},
 };
+use olpc_cjson::CanonicalFormatter;
+use serde::Serialize;
+use sha2::{Digest, Sha256};
 
 use crate::image::blob_store::BlobStore;
 
@@ -19,6 +22,7 @@ pub enum ImageError {
 }
 
 pub struct Image {
+    pub digest: String,
     pub config: Config,
     pub manifest: OciImageManifest,
     pub platform: Option<Platform>,
@@ -28,11 +32,23 @@ pub struct Image {
 impl Debug for Image {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Image")
+            .field("digest", &self.digest)
             .field("manifest", &self.manifest)
             .field("platform", &self.platform)
             .field("layer_count", &self.layers.len())
             .finish()
     }
+}
+
+fn compute_digest(manifest: &OciImageManifest) -> Result<String, serde_json::Error> {
+    let mut body = vec![];
+    let mut ser = serde_json::Serializer::with_formatter(&mut body, CanonicalFormatter::new());
+    manifest.serialize(&mut ser)?;
+
+    let mut hasher = Sha256::default();
+    hasher.update(body);
+
+    Ok(format!("sha256:{}", hex::encode(hasher.finalize())))
 }
 
 pub async fn load_from_path(dir: impl AsRef<Path>) -> Result<Vec<Image>, ImageError> {
@@ -57,6 +73,7 @@ pub async fn load_from_path(dir: impl AsRef<Path>) -> Result<Vec<Image>, ImageEr
             ));
         }
 
+        let digest = compute_digest(&manifest)?;
         let data = store.read_blob(&manifest.config.digest).await?;
         let config = Config {
             data,
@@ -69,6 +86,7 @@ pub async fn load_from_path(dir: impl AsRef<Path>) -> Result<Vec<Image>, ImageEr
             layers,
             platform: entry.platform,
             config,
+            digest,
         });
     }
 

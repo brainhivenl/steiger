@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     env,
     error::Error,
     path::{Path, PathBuf},
@@ -104,15 +105,26 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     };
 
                     let client = Client::new(ClientConfig::default());
-                    let mut registry = Registry::new(Arc::clone(&root), client, auth);
+                    let registry = Registry::new(Arc::clone(&root), client, auth);
+                    let mut artifacts = HashMap::new();
 
                     for (artifact, images) in output.artifacts {
                         for image in images {
-                            registry.push(&repo, &artifact, image).await?;
+                            artifacts.insert(
+                                artifact.clone(),
+                                registry.push(&repo, &artifact, image).await?,
+                            );
                         }
                     }
 
                     handle.shutdown_and_wait();
+
+                    println!("\nPushed artifacts:");
+
+                    for (artifact, output) in artifacts {
+                        println!("- {artifact}: {}", output.reference);
+                    }
+
                     Ok(())
                 }
                 None => {

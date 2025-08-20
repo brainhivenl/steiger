@@ -1,6 +1,8 @@
 use std::sync::Arc;
 
-use oci_distribution::{Client, Reference, errors::OciDistributionError, secrets::RegistryAuth};
+use oci_distribution::{
+    Client, Reference, client::PushResponse, errors::OciDistributionError, secrets::RegistryAuth,
+};
 use prodash::{messages::MessageLevel, tree::Root};
 
 use crate::image::Image;
@@ -14,8 +16,7 @@ pub enum PushError {
 }
 
 pub struct ImageOutput {
-    pub config_url: String,
-    pub manifest_url: String,
+    pub response: Option<PushResponse>,
     pub reference: Reference,
 }
 
@@ -34,14 +35,45 @@ impl Registry {
         }
     }
 
+    async fn try_resolve_digest(
+        &self,
+        reference: &Reference,
+    ) -> Result<Option<String>, OciDistributionError> {
+        match self
+            .client
+            .fetch_manifest_digest(reference, &self.auth)
+            .await
+        {
+            Ok(digest) => Ok(Some(digest)),
+            Err(OciDistributionError::ImageManifestNotFoundError(_)) => {
+                // If the manifest is not found, we assume the image does not exist
+                Ok(None)
+            }
+            Err(e) => Err(e),
+        }
+    }
+
     pub async fn push(
-        &mut self,
+        &self,
         repo: &str,
         artifact: &str,
         image: Image,
     ) -> Result<ImageOutput, PushError> {
         let reference = Reference::try_from(format!("{repo}/{artifact}:latest"))?;
         let progress = self.progress.add_child(format!("pushing {artifact}"));
+
+        if let Some(digest) = self.try_resolve_digest(&reference).await? {
+            progress.message(MessageLevel::Info, "image already exists, skipping push");
+
+            return Ok(ImageOutput {
+                response: None,
+                reference: Reference::with_digest(
+                    reference.registry().to_string(),
+                    reference.repository().to_string(),
+                    digest,
+                ),
+            });
+        }
 
         progress.message(MessageLevel::Info, "pushing image");
 
@@ -59,9 +91,8 @@ impl Registry {
         progress.message(MessageLevel::Success, "image pushed");
 
         Ok(ImageOutput {
-            config_url: response.config_url,
-            manifest_url: response.manifest_url,
             reference,
+            response: Some(response),
         })
     }
 }
