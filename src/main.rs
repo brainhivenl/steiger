@@ -88,11 +88,17 @@ enum AppError {
     #[error("failed to read config")]
     Config(#[from] ConfigError),
     #[error("failed to build")]
-    Build(#[from] cmd::build::Error),
+    Build(Box<cmd::build::Error>),
     #[error("failed to get current dir")]
     CurrentDir(std::io::Error),
     #[error("failed to set current dir")]
     SetCurrentDir(std::io::Error),
+}
+
+impl From<cmd::build::Error> for AppError {
+    fn from(e: cmd::build::Error) -> Self {
+        AppError::Build(Box::new(e))
+    }
 }
 
 async fn run(opts: Opts) -> Result<(), AppError> {

@@ -7,6 +7,7 @@ use tokio::fs;
 use crate::{
     builder::{BuildError, MetaBuild},
     config::Config,
+    image::Image,
     parse_host, progress,
     registry::{PushError, Registry},
     tag::{self, TagError},
@@ -45,12 +46,27 @@ pub enum Error {
     Build(#[from] BuildError),
     #[error("failed to push")]
     Push(#[from] PushError),
+    #[error("failed to find image for platform")]
+    NoImage(String),
     #[error("failed to write output")]
     WriteOutput(#[from] WriteError),
     #[error("failed to retrieve registry credentials")]
     Credential(#[from] CredentialRetrievalError),
     #[error("failed to parse reference")]
     Parse(#[from] oci_distribution::ParseError),
+}
+
+fn find_image(mut images: Vec<Image>, platform: &str) -> Result<Image, Error> {
+    if let Some(n) = images.iter().position(
+        |i| matches!(i.platform, Some(ref p) if format!("{}/{}", p.os, p.architecture) == platform),
+    ) {
+        return Ok(images.remove(n));
+    }
+
+    images
+        .into_iter()
+        .find(|i| i.platform.is_none())
+        .ok_or(Error::NoImage(platform.to_string()))
 }
 
 pub async fn run(
@@ -62,7 +78,7 @@ pub async fn run(
     let root = progress::tree();
     let handle = progress::setup_line_renderer(&root);
     let builder = MetaBuild::new(Arc::new(config));
-    let output = builder.build(root.add_child("build"), platform).await?;
+    let output = builder.build(root.add_child("build"), &platform).await?;
     let tag = tag::resolve().await?;
 
     match repo {
@@ -74,17 +90,21 @@ pub async fn run(
             };
 
             let client = Client::new(ClientConfig::default());
-            let registry = Registry::new(Arc::clone(&root), client, auth);
+            let mut progress = root.add_child("push");
+            progress.init(Some(output.artifacts.len()), None);
+
+            let mut registry = Registry::new(client, auth);
             let mut artifacts = HashMap::new();
 
             for (artifact, images) in output.artifacts {
-                for image in images {
-                    let image_ref = Reference::try_from(format!("{repo}/{artifact}:{tag}"))?;
-                    let output_ref = format!("{repo}/{artifact}:{tag}@{}", image.digest);
+                let image = find_image(images, &platform)?;
+                let pb = progress.add_child(format!("{artifact} › push"));
+                let image_ref = Reference::try_from(format!("{repo}/{artifact}:{tag}"))?;
+                let output_ref = format!("{repo}/{artifact}:{tag}@{}", image.digest);
 
-                    registry.push(&artifact, &image_ref, image).await?;
-                    artifacts.insert(artifact.clone(), output_ref);
-                }
+                registry.push(pb, &image_ref, image).await?;
+                artifacts.insert(artifact.clone(), output_ref);
+                progress.inc();
             }
 
             handle.shutdown_and_wait();
@@ -92,7 +112,7 @@ pub async fn run(
             println!("\nPushed artifacts:");
 
             for (artifact, image_ref) in artifacts.iter() {
-                println!("- {artifact}: {}", image_ref);
+                println!("- {artifact}: {image_ref}");
             }
 
             if let Some(path) = output_file {

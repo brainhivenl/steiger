@@ -1,12 +1,10 @@
-use std::sync::Arc;
-
 use oci_distribution::{
     Client, Reference,
     client::PushResponse,
     errors::{OciDistributionError, OciErrorCode},
     secrets::RegistryAuth,
 };
-use prodash::{messages::MessageLevel, tree::Root};
+use prodash::{messages::MessageLevel, tree::Item};
 
 use crate::image::Image;
 
@@ -19,16 +17,11 @@ pub enum PushError {
 pub struct Registry {
     auth: RegistryAuth,
     client: Client,
-    progress: Arc<Root>,
 }
 
 impl Registry {
-    pub fn new(progress: Arc<Root>, client: Client, auth: RegistryAuth) -> Self {
-        Self {
-            auth,
-            client,
-            progress,
-        }
+    pub fn new(client: Client, auth: RegistryAuth) -> Self {
+        Self { auth, client }
     }
 
     async fn try_resolve_digest(
@@ -52,13 +45,11 @@ impl Registry {
     }
 
     pub async fn push(
-        &self,
-        artifact: &str,
+        &mut self,
+        progress: Item,
         image_ref: &Reference,
         image: Image,
     ) -> Result<Option<PushResponse>, PushError> {
-        let progress = self.progress.add_child(format!("{artifact} › push"));
-
         if let Some(digest) = self.try_resolve_digest(image_ref).await? {
             // If the digest matches the image's digest, we can skip pushing
             if digest == image.digest {

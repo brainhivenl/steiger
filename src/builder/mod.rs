@@ -89,7 +89,7 @@ impl MetaBuild {
         }
     }
 
-    pub async fn build(mut self, mut pb: Item, platform: String) -> Result<Output, BuildError> {
+    pub async fn build(mut self, mut pb: Item, platform: &str) -> Result<Output, BuildError> {
         let instant = Instant::now();
         let config = Arc::clone(&self.config);
         let mut set = JoinSet::default();
@@ -107,7 +107,7 @@ impl MetaBuild {
 
                     set.spawn(
                         builder
-                            .build(progress, name.to_string(), platform.clone(), config)
+                            .build(progress, name.to_string(), platform.to_string(), config)
                             .map_err(BuildError::Bazel),
                     );
                 }
@@ -117,7 +117,7 @@ impl MetaBuild {
 
                     set.spawn(
                         builder
-                            .build(progress, name.to_string(), platform.clone(), config)
+                            .build(progress, name.to_string(), platform.to_string(), config)
                             .map_err(BuildError::Docker),
                     );
                 }
@@ -135,7 +135,7 @@ impl MetaBuild {
 
         pb.message(
             MessageLevel::Info,
-            format!("build completed in {:?}", elapsed),
+            format!("build completed in {elapsed:?}"),
         );
 
         Ok(output)
