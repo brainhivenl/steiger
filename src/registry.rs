@@ -60,7 +60,7 @@ impl Registry {
         image: Image,
     ) -> Result<ImageOutput, PushError> {
         let reference = Reference::try_from(format!("{repo}/{artifact}:latest"))?;
-        let progress = self.progress.add_child(format!("pushing {artifact}"));
+        let progress = self.progress.add_child(format!("{artifact} › push"));
 
         if let Some(digest) = self.try_resolve_digest(&reference).await? {
             progress.message(MessageLevel::Info, "image already exists, skipping push");
