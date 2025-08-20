@@ -15,6 +15,7 @@ pub enum PushError {
     Oci(#[from] OciDistributionError),
 }
 
+#[derive(Clone)]
 pub struct Registry {
     auth: RegistryAuth,
     client: Client,
@@ -85,12 +86,12 @@ impl Registry {
                             progress.inc();
                             Ok(())
                         }
-                        Err(OciDistributionError::ServerError { code, .. }) if code == 404 => {
+                        Err(OciDistributionError::ServerError { code: 404, .. }) => {
                             client.push_blob(image_ref, &layer.data, &digest).await?;
                             progress.inc();
                             Ok(())
                         }
-                        Err(e) => Err(e.into()),
+                        Err(e) => Err(e),
                     }
                 }
             })

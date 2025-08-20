@@ -126,7 +126,7 @@ impl MetaBuild {
 
         let mut output = Output::default();
 
-        for result in set.join_all().await {
+        while let Some(Ok(result)) = set.join_next().await {
             pb.inc();
             output.merge(result?);
         }

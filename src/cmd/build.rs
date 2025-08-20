@@ -2,7 +2,7 @@ use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use docker_credential::{CredentialRetrievalError, DockerCredential};
 use oci_client::{Client, Reference, client::ClientConfig, secrets::RegistryAuth};
-use tokio::fs;
+use tokio::{fs, task::JoinSet};
 
 use crate::{
     builder::{BuildError, MetaBuild},
@@ -93,17 +93,27 @@ pub async fn run(
             let mut progress = root.add_child("push");
             progress.init(Some(output.artifacts.len()), None);
 
-            let mut registry = Registry::new(client, auth);
+            let registry = Registry::new(client, auth);
             let mut artifacts = HashMap::new();
+            let mut set = JoinSet::<Result<_, PushError>>::new();
 
             for (artifact, images) in output.artifacts {
                 let image = find_image(images, &platform)?;
                 let pb = progress.add_child(format!("{artifact} › push"));
                 let image_ref = Reference::try_from(format!("{repo}/{artifact}:{tag}"))?;
                 let output_ref = format!("{repo}/{artifact}:{tag}@{}", image.digest);
+                let mut registry = registry.clone();
 
-                registry.push(pb, &image_ref, image).await?;
-                artifacts.insert(artifact.clone(), output_ref);
+                set.spawn(async move {
+                    registry.push(pb, &image_ref, image).await?;
+                    Ok((artifact, output_ref))
+                });
+            }
+
+            while let Some(Ok(result)) = set.join_next().await {
+                let (artifact, output_ref) = result?;
+
+                artifacts.insert(artifact, output_ref);
                 progress.inc();
             }
 
