@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 use std::path::Path;
 
-use oci_distribution::{
+use oci_client::{
     client::{Config, ImageLayer},
     manifest::{OciImageIndex, OciImageManifest, Platform},
 };

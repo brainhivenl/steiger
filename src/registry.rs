@@ -1,4 +1,4 @@
-use oci_distribution::{
+use oci_client::{
     Client, Reference,
     client::PushResponse,
     errors::{OciDistributionError, OciErrorCode},

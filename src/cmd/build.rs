@@ -1,7 +1,7 @@
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use docker_credential::{CredentialRetrievalError, DockerCredential};
-use oci_distribution::{Client, Reference, client::ClientConfig, secrets::RegistryAuth};
+use oci_client::{Client, Reference, client::ClientConfig, secrets::RegistryAuth};
 use tokio::fs;
 
 use crate::{
@@ -53,7 +53,7 @@ pub enum Error {
     #[error("failed to retrieve registry credentials")]
     Credential(#[from] CredentialRetrievalError),
     #[error("failed to parse reference")]
-    Parse(#[from] oci_distribution::ParseError),
+    Parse(#[from] oci_client::ParseError),
 }
 
 fn find_image(mut images: Vec<Image>, platform: &str) -> Result<Image, Error> {
