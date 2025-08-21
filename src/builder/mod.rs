@@ -52,6 +52,20 @@ type ErrorOf<T> = <T as Builder>::Error;
 
 use std::{collections::HashMap, sync::Arc};
 
+fn builder<B: Builder>(var: &mut Option<B>) -> Result<B, BuildError>
+where
+    BuildError: From<<B as Builder>::Error>,
+{
+    match var.clone() {
+        Some(builder) => Ok(builder),
+        None => {
+            let builder = B::try_init()?;
+            *var = Some(builder.clone());
+            Ok(builder)
+        }
+    }
+}
+
 pub struct MetaBuild {
     config: Arc<Config>,
     bazel: Option<BazelBuilder>,
@@ -64,28 +78,6 @@ impl MetaBuild {
             config,
             bazel: None,
             docker: None,
-        }
-    }
-
-    fn docker(&mut self) -> Result<DockerBuilder, BuildError> {
-        match self.docker.clone() {
-            Some(builder) => Ok(builder),
-            None => {
-                let builder = DockerBuilder::try_init()?;
-                self.docker = Some(builder.clone());
-                Ok(builder)
-            }
-        }
-    }
-
-    fn bazel(&mut self) -> Result<BazelBuilder, BuildError> {
-        match self.bazel.clone() {
-            Some(builder) => Ok(builder),
-            None => {
-                let builder = BazelBuilder::try_init()?;
-                self.bazel = Some(builder.clone());
-                Ok(builder)
-            }
         }
     }
 
@@ -102,21 +94,19 @@ impl MetaBuild {
 
             match &service.build {
                 Build::Bazel(bazel) => {
-                    let builder = self.bazel()?;
                     let config = bazel.clone();
 
                     set.spawn(
-                        builder
+                        builder(&mut self.bazel)?
                             .build(progress, name.to_string(), platform.to_string(), config)
                             .map_err(BuildError::Bazel),
                     );
                 }
                 Build::Docker(docker) => {
-                    let builder = self.docker()?;
                     let config = docker.clone();
 
                     set.spawn(
-                        builder
+                        builder(&mut self.docker)?
                             .build(progress, name.to_string(), platform.to_string(), config)
                             .map_err(BuildError::Docker),
                     );
