@@ -68,6 +68,8 @@ services:
       type: docker
       context: ./frontend
       dockerfile: Dockerfile.prod # optional, defaults to Dockerfile
+      buildArgs:
+        ENV: ${env} # variable substitution is supported
 
   backend:
     build:
@@ -80,6 +82,10 @@ services:
     build:
       type: ko
       importPath: ./cmd/service
+
+profiles:
+  prod:
+    env: prod
 ```
 
 ### Bazel Configuration

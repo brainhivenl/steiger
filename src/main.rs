@@ -1,13 +1,9 @@
-use std::{
-    env,
-    error::Error,
-    path::{Path, PathBuf},
-};
+use std::{env, error::Error, path::PathBuf};
 
 use clap::Parser;
 use miette::Diagnostic;
 
-use crate::config::Config;
+use crate::config::ConfigError;
 
 mod builder;
 mod cmd;
@@ -39,22 +35,12 @@ enum Cmd {
         #[arg(short, long, help = "Output file location")]
         output_file: Option<PathBuf>,
 
-        #[arg(long)]
+        #[arg(long, help = "Platform selector (e.g. linux/amd64)")]
         platform: Option<String>,
+
+        #[arg(short, long, help = "Profile name")]
+        profile: Option<String>,
     },
-}
-
-#[derive(Debug, thiserror::Error)]
-enum ConfigError {
-    #[error("I/O error")]
-    IO(#[from] std::io::Error),
-    #[error("failed to deserialize")]
-    Yaml(#[from] serde_yml::Error),
-}
-
-async fn read_config_file(path: impl AsRef<Path>) -> Result<Config, ConfigError> {
-    let contents = tokio::fs::read(path).await?;
-    Ok(serde_yml::from_slice(&contents)?)
 }
 
 pub fn parse_host(path: &str) -> &str {
@@ -107,17 +93,20 @@ async fn run(opts: Opts) -> Result<(), AppError> {
         .map(Ok)
         .unwrap_or_else(env::current_dir)
         .map_err(AppError::CurrentDir)?;
-    let config = read_config_file(opts.config.unwrap_or_else(|| dir.join("steiger.yml"))).await?;
+    let config_path = opts.config.unwrap_or_else(|| dir.join("steiger.yml"));
     let detected_platform = detect_platform().await;
 
     env::set_current_dir(&dir).map_err(AppError::SetCurrentDir)?;
 
     match opts.cmd {
         Cmd::Build {
+            profile,
             repo,
             output_file,
             platform,
         } => {
+            let config = config::load_from_path(profile.as_deref(), config_path).await?;
+
             cmd::build::run(
                 config,
                 platform.unwrap_or(detected_platform),
