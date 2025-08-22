@@ -22,9 +22,16 @@ pub struct Docker {
     pub dockerfile: Option<String>,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Ko {
+    pub import_path: Option<String>,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum Build {
+    Ko(Ko),
     Bazel(Bazel),
     Docker(Docker),
 }
