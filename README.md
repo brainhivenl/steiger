@@ -1,34 +1,47 @@
 # Steiger
 
-A modern, high-performance container build orchestrator with native support for Bazel and Docker BuildKit. Steiger streamlines multi-service container builds and registry operations with automatic platform detection and parallel execution. Similar to Skaffold, but optimized for Bazel workflows and OCI images.
+A container build orchestrator for multi-service projects with native support for Bazel, Docker BuildKit, and Ko. Steiger coordinates parallel builds and handles registry operations with automatic platform detection.
 
-## Features
+## Project Status
 
-### 🚀 Multi-Builder Support
+- ✅ **Basic building and pushing**: Core functionality is stable
+- ✅ **Multi-service parallel builds**: Working with real-time progress
+- ✅ **Registry integration**: Push to any OCI-compliant registry
+- ⏳ **Dev mode**: File watching and rebuild-on-change (planned)
+- ⏳ **Deploy**: Native Kubernetes deployment support (planned)
 
-- **Native Bazel Integration**: First-class support for Bazel builds with automatic target discovery and platform configuration
-- **Docker BuildKit**: Leverages Docker's next-generation BuildKit for efficient, cached builds
-- **Parallel Execution**: Build multiple services concurrently with real-time progress tracking
+For now, you can use [Skaffold](https://skaffold.dev/) to deploy images built by Steiger using the compatible JSON output format.
 
-### 🎯 Platform Detection
+## Supported Builders
 
-- Automatically detects the target platform from Kubernetes clusters when available
-- Falls back to host platform detection (linux/amd64, linux/arm64, darwin/amd64, darwin/arm64, windows/amd64)
-- Per-service platform configuration for Bazel builds
+### Docker BuildKit
 
-### 📦 OCI Registry Integration
+Uses [Docker BuildKit](https://docs.docker.com/build/buildkit/) with the `docker-container` driver for efficient, cached builds. Steiger manages the BuildKit builder instance automatically.
 
-- Push built images directly to any OCI-compliant registry
-- Digest checking to avoid redundant pushes
-- Automatic authentication via Docker credential helpers
-- Support for multi-architecture image manifests
+Requirements:
 
-### 🔧 Developer Experience
+- Docker with BuildKit support
+- `docker-container` driver (managed by Steiger)
 
-- Real-time build progress with interactive terminal UI
-- Skaffold-compatible output format for seamless integration
-- Configurable via simple YAML configuration
-- Automatic BuildKit builder management
+### Bazel
+
+Integrates with [Bazel](https://bazel.build/) builds that output OCI image layouts. Works best with [`rules_oci`](https://github.com/bazel-contrib/rules_oci) for creating OCI-compatible container images.
+
+Key difference from Skaffold: Steiger works directly with OCI image layouts, skipping the TAR export step that Skaffold requires. This allows direct pushing to registries without intermediate file formats.
+
+### Ko
+
+Supports [Ko](https://ko.build/) for building Go applications into container images without Dockerfiles.
+
+## Build Caching
+
+Steiger delegates caching to the underlying build systems rather than implementing its own cache layer:
+
+- **Docker BuildKit**: Leverages BuildKit's native layer caching and build cache
+- **Bazel**: Uses Bazel's extensive caching system (action cache, remote cache, etc.)
+- **Ko**: Benefits from Go's build cache and Ko's layer caching
+
+This approach avoids cache invalidation issues and performs comparably to Skaffold in cached scenarios, with better performance in some cases.
 
 ## Installation
 
@@ -46,7 +59,7 @@ cargo build --release
 
 ## Configuration
 
-Create a `steiger.yml` file in your project root:
+Create a `steiger.yml` file:
 
 ```yaml
 services:
@@ -54,7 +67,7 @@ services:
     build:
       type: docker
       context: ./frontend
-      dockerfile: Dockerfile.prod # optional, defaults to ./frontend/Dockerfile
+      dockerfile: Dockerfile.prod # optional, defaults to Dockerfile
 
   backend:
     build:
@@ -62,27 +75,52 @@ services:
       targets:
         app: //cmd/server:image
         migrations: //cmd/migrations:image
+
+  go-service:
+    build:
+      type: ko
+      importPath: ./cmd/service
+```
+
+### Bazel Configuration
+
+For Bazel builds, ensure your targets produce OCI image layouts:
+
+```python
+# BUILD.bazel
+load("@rules_oci//oci:defs.bzl", "oci_image", "oci_tarball")
+
+oci_image(
+    name = "image",
+    base = "@distroless_base",
+    entrypoint = ["/app"],
+    tars = [":app_layer"],
+)
+```
+
+Platform-specific builds:
+
+```yaml
+services:
+  multi-arch:
+    build:
+      type: bazel
       platforms:
         linux/amd64: //platforms:linux_amd64
         linux/arm64: //platforms:linux_arm64
-
-  worker:
-    build:
-      type: docker
-      context: ./services/worker
+      targets:
+        app: //cmd/app:image
 ```
 
 ## Usage
 
-### Basic Build
-
-Build all services defined in `steiger.yml`:
+### Build All Services
 
 ```bash
 steiger build
 ```
 
-### Build and Push to Registry
+### Build and Push
 
 ```bash
 steiger build --repo gcr.io/my-project
@@ -90,19 +128,19 @@ steiger build --repo gcr.io/my-project
 
 This will:
 
-1. Build all configured services in parallel
-2. Push images to `gcr.io/my-project/{service-name}:latest`
-3. Skip pushing if the image already exists (based on digest)
+1. Build all services in parallel
+2. Push to `gcr.io/my-project/{service-name}:latest`
+3. Skip redundant pushes based on image digests
 
-### Generate Skaffold-Compatible Output
+### Generate Build Metadata
 
-For integration with existing Skaffold workflows:
+Compatible with Skaffold's build output format:
 
 ```bash
-steiger build --repo gcr.io/my-project --output-file build.json
+steiger build --repo gcr.io/my-project --output-file builds.json
 ```
 
-Output format:
+Output:
 
 ```json
 {
@@ -113,123 +151,65 @@ Output format:
     },
     {
       "imageName": "backend-app",
-      "tag": "gcr.io/my-project/backend-app@sha256:..."
+      "tag": "gcr.io/my-project/backend-app@sha256:abc123..."
     }
   ]
 }
 ```
 
-### Custom Configuration Path
+### Options
 
 ```bash
-steiger --config ./deploy/steiger.yml build --repo myregistry.io/project
-```
+# Custom config location
+steiger --config ./deploy/steiger.yml build
 
-### Working Directory
-
-```bash
+# Change working directory
 steiger --dir ./monorepo build
+
+# Build and push
+steiger build --repo ghcr.io/foo/bar --platform linux/amd64
 ```
 
-## Builder Details
+## Platform Detection
 
-### Bazel Builder
+Steiger automatically detects the target platform:
 
-The Bazel builder supports:
+1. From Kubernetes cluster context (if available)
+2. Host platform detection as fallback
 
-- Multiple artifacts per service (e.g., separate app and migration images)
-- Platform-specific build configurations
-- Automatic output discovery via `bazel cquery`
-- Support for both `bazel` and `bazelisk` binaries
+Supported platforms: `linux/amd64`, `linux/arm64`, `darwin/amd64`, `darwin/arm64`, `windows/amd64`
 
-Example Bazel rules:
+## Registry Authentication
 
-```python
-oci_image(
-    name = "image",
-    base = "@distroless_cc",
-    entrypoint = ["/app"],
-    tars = [":app_layer"],
-)
-```
-
-### Docker Builder
-
-The Docker builder features:
-
-- Automatic BuildKit builder creation and management
-- Multi-platform builds
-- Build context and Dockerfile customization
-- OCI format output (not Docker format)
-- Efficient layer caching
-
-## Advanced Features
-
-### Platform Configuration
-
-Steiger automatically detects the target platform in the following order:
-
-1. Kubernetes cluster platform (via kubeconfig)
-2. Host platform detection
-
-For Bazel builds, you can specify platform mappings:
-
-```yaml
-services:
-  cross-platform-service:
-    build:
-      type: bazel
-      platforms:
-        linux/amd64: //build/platforms:linux_amd64
-        linux/arm64: //build/platforms:linux_arm64
-        darwin/amd64: //build/platforms:darwin_amd64
-      targets:
-        app: //cmd/app:image
-```
-
-### Registry Authentication
-
-Steiger uses Docker's credential helper system for registry authentication:
+Uses Docker's credential helper system:
 
 ```bash
-# Login to Docker Hub
+# Docker Hub
 docker login
 
-# Login to GCR
-docker-credential-gcr configure-docker
+# Google Container Registry
+gcloud auth configure-docker
 
-# Login to ECR
-aws ecr get-login-password | docker login --username AWS --password-stdin $ECR_REGISTRY
+# AWS ECR
+aws ecr get-login-password --region us-west-2 | docker login --username AWS --password-stdin $ECR_REGISTRY
 ```
-
-### Progress Monitoring
-
-Steiger provides detailed progress information during builds:
-
-- Real-time output from build commands
-- Progress bars for parallel builds
-- Status messages for each build stage
-- Automatic terminal UI adaptation
 
 ## Architecture
 
-Steiger is built with:
-
-- **Async/Await**: Tokio-based asynchronous runtime for maximum performance
-- **Parallel Execution**: Concurrent builds across multiple services
-- **Modular Builders**: Extensible builder trait system
-- **OCI Native**: Direct OCI format manipulation without Docker daemon dependency
+- **Async Runtime**: Built on Tokio for concurrent operations
+- **OCI Native**: Direct manipulation of OCI image formats
+- **Builder Abstraction**: Extensible system for supporting new build tools
+- **Registry Client**: Direct OCI registry operations without Docker daemon
 
 ## Comparison with Skaffold
 
-| Feature           | Steiger                                                         | Skaffold                                       |
-| ----------------- | --------------------------------------------------------------- | ---------------------------------------------- |
-| Bazel Support     | Direct OCI format via `bazel cquery`, leverages Bazel's caching | Requires TAR output, slower metadata gathering |
-| Docker BuildKit   | Native, automatic builder management                            | Supported                                      |
-| Build Parallelism | Default                                                         | Configurable                                   |
-| Progress UI       | Built-in interactive                                            | Text output                                    |
-| Configuration     | Simple YAML                                                     | Extensive YAML                                 |
+| Aspect            | Steiger                        | Skaffold                    |
+| ----------------- | ------------------------------ | --------------------------- |
+| Bazel Integration | OCI layout direct from Bazel   | TAR export required         |
+| Build Caching     | Delegates to build systems     | Custom cache management     |
+| Configuration     | Minimal YAML                   | Comprehensive configuration |
+| Deployment        | Planned (use Skaffold for now) | Full lifecycle management   |
 
-## Acknowledgments
+## Contributing
 
-Inspired by [Skaffold](https://skaffold.dev/) with a focus on modern build systems and native Bazel support.
+This project is under active development, contributions are welcome.

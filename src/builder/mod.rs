@@ -1,5 +1,5 @@
 use crate::{
-    builder::{bazel::BazelBuilder, docker::DockerBuilder},
+    builder::{bazel::BazelBuilder, docker::DockerBuilder, ko::KoBuilder},
     config::{Build, Config},
     image::Image,
 };
@@ -10,9 +10,12 @@ use tokio::{task::JoinSet, time::Instant};
 
 mod bazel;
 mod docker;
+mod ko;
 
 #[derive(Debug, thiserror::Error)]
 pub enum BuildError {
+    #[error("ko error")]
+    Ko(#[from] ErrorOf<KoBuilder>),
     #[error("docker error")]
     Docker(#[from] ErrorOf<DockerBuilder>),
     #[error("bazel error")]
@@ -32,6 +35,30 @@ impl Output {
     }
 }
 
+pub struct Context<T> {
+    pub service_name: String,
+    pub platform: String,
+    pub input: T,
+}
+
+impl<T> Context<T> {
+    pub fn new(service_name: String, platform: String, input: T) -> Self {
+        Self {
+            service_name,
+            platform,
+            input,
+        }
+    }
+
+    pub fn with<I>(self, input: I) -> Context<I> {
+        Context {
+            input,
+            platform: self.platform,
+            service_name: self.service_name,
+        }
+    }
+}
+
 pub trait Builder: Clone {
     type Error;
     type Input;
@@ -42,9 +69,7 @@ pub trait Builder: Clone {
     async fn build(
         self,
         progress: Item,
-        service_name: String,
-        platform: String,
-        input: Self::Input,
+        input: Context<Self::Input>,
     ) -> Result<Output, Self::Error>;
 }
 
@@ -52,22 +77,30 @@ type ErrorOf<T> = <T as Builder>::Error;
 
 use std::{collections::HashMap, sync::Arc};
 
-fn builder<B: Builder>(var: &mut Option<B>) -> Result<B, BuildError>
+fn run_builder<B>(
+    var: &mut Option<B>,
+    progress: Item,
+    ctx: Context<B::Input>,
+) -> Result<impl Future<Output = Result<Output, <B as Builder>::Error>> + use<B>, BuildError>
 where
+    B: Builder,
     BuildError: From<<B as Builder>::Error>,
 {
-    match var.clone() {
+    let builder = match var.clone() {
         Some(builder) => Ok(builder),
         None => {
             let builder = B::try_init()?;
             *var = Some(builder.clone());
             Ok(builder)
         }
-    }
+    }?;
+
+    Ok(builder.build(progress, ctx))
 }
 
 pub struct MetaBuild {
     config: Arc<Config>,
+    ko: Option<KoBuilder>,
     bazel: Option<BazelBuilder>,
     docker: Option<DockerBuilder>,
 }
@@ -76,6 +109,7 @@ impl MetaBuild {
     pub fn new(config: Arc<Config>) -> Self {
         Self {
             config,
+            ko: None,
             bazel: None,
             docker: None,
         }
@@ -91,23 +125,24 @@ impl MetaBuild {
 
         for (name, service) in config.services.iter() {
             let progress = pb.add_child(name);
+            let ctx = Context::new(name.clone(), platform.to_string(), ());
 
             match &service.build {
-                Build::Bazel(bazel) => {
-                    let config = bazel.clone();
-
+                Build::Ko(ko) => {
                     set.spawn(
-                        builder(&mut self.bazel)?
-                            .build(progress, name.to_string(), platform.to_string(), config)
+                        run_builder(&mut self.ko, progress, ctx.with(ko.clone()))?
+                            .map_err(BuildError::Ko),
+                    );
+                }
+                Build::Bazel(bazel) => {
+                    set.spawn(
+                        run_builder(&mut self.bazel, progress, ctx.with(bazel.clone()))?
                             .map_err(BuildError::Bazel),
                     );
                 }
                 Build::Docker(docker) => {
-                    let config = docker.clone();
-
                     set.spawn(
-                        builder(&mut self.docker)?
-                            .build(progress, name.to_string(), platform.to_string(), config)
+                        run_builder(&mut self.docker, progress, ctx.with(docker.clone()))?
                             .map_err(BuildError::Docker),
                     );
                 }

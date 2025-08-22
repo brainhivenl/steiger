@@ -4,7 +4,7 @@ use prodash::messages::MessageLevel;
 use tokio::process::Command;
 
 use crate::{
-    builder::{Builder, Output},
+    builder::{Builder, Context, Output},
     config::Bazel,
     exec::{self, ExitError},
     image,
@@ -81,9 +81,11 @@ impl Builder for BazelBuilder {
     async fn build(
         self,
         mut progress: prodash::tree::Item,
-        service_name: String,
-        platform: String,
-        input: Self::Input,
+        Context {
+            service_name,
+            platform,
+            input,
+        }: Context<Self::Input>,
     ) -> Result<Output, Self::Error> {
         progress.set_name(&service_name);
         progress.message(MessageLevel::Info, "starting builder");
