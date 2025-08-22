@@ -1,4 +1,4 @@
-use std::{path::PathBuf, process::ExitStatus};
+use std::{collections::HashMap, path::PathBuf, process::ExitStatus};
 
 use async_tempfile::TempDir;
 use prodash::messages::MessageLevel;
@@ -39,6 +39,12 @@ mod buildx {
     pub struct Builder {
         pub name: String,
     }
+}
+
+fn fmt_map(map: HashMap<String, String>, sep: char) -> Vec<String> {
+    map.into_iter()
+        .map(|(name, value)| format!("{name}{sep}{value}"))
+        .collect::<Vec<_>>()
 }
 
 #[derive(Clone)]
@@ -113,10 +119,25 @@ impl Builder for DockerBuilder {
             progress.message(MessageLevel::Info, "using existing buildkit builder");
         }
 
+        let mut custom_args = vec![];
+        let build_args = fmt_map(input.build_args, '=');
+        let hosts = fmt_map(input.hosts, ':');
+
+        for entry in build_args.iter() {
+            custom_args.push("--build-arg");
+            custom_args.push(entry);
+        }
+
+        for entry in hosts.iter() {
+            custom_args.push("--add-host");
+            custom_args.push(entry);
+        }
+
         let dest = TempDir::new_with_name(&service_name).await?;
         let status = exec::run_with_progress(
             Command::new(&self.binary)
                 .arg("build")
+                .args(custom_args)
                 .arg("--builder")
                 .arg("steiger")
                 .arg("--platform")

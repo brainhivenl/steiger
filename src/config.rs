@@ -20,6 +20,10 @@ pub struct Bazel {
 pub struct Docker {
     pub context: String,
     pub dockerfile: Option<String>,
+    #[serde(default)]
+    pub build_args: HashMap<String, String>,
+    #[serde(default)]
+    pub hosts: HashMap<String, String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
