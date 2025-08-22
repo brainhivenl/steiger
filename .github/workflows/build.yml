@@ -1,0 +1,38 @@
+on: [push]
+
+name: build
+
+jobs:
+  check:
+    name: Build
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        triple:
+          - x86_64-unknown-linux-gnu
+          - arm-unknown-linux-gnueabi
+          - aarch64-apple-darwin
+          - x86_64-apple-darwin
+    steps:
+      - uses: actions/checkout@v2
+      - name: Setup Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          override: true
+          toolchain: stable
+          target: ${{ matrix.triple }}
+          components: rustfmt, clippy
+      - name: Check
+        uses: actions-rs/cargo@v1
+        if: ${{ matrix.triple == 'x86_64-unknown-linux-gnu' }}
+        with:
+          command: check
+      - name: Build
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: steiger-${{ matrix.triple }}
+          path: target/release/steiger
