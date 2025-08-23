@@ -1,4 +1,8 @@
-use std::{collections::HashMap, mem, path::Path};
+use std::{
+    collections::HashMap,
+    mem,
+    path::{Path, PathBuf},
+};
 
 use miette::Diagnostic;
 use serde::Deserialize;
@@ -34,12 +38,20 @@ pub struct Ko {
     pub import_path: Option<String>,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Nix {
+    pub packages: HashMap<String, String>,
+    pub flake: Option<PathBuf>,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum Build {
     Ko(Ko),
     Bazel(Bazel),
     Docker(Docker),
+    Nix(Nix),
 }
 
 #[derive(Debug, Deserialize)]

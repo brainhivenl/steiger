@@ -3014,6 +3014,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde_repr"
+version = "0.1.20"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "175ee3e80ae9982737ca543e96133087cbd9a485eecc3bc4de9c1a37b47ea59c"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "serde_urlencoded"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3175,6 +3186,7 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 name = "steiger"
 version = "0.1.0"
 dependencies = [
+ "aho-corasick",
  "async-tempfile",
  "clap",
  "docker_credential",
@@ -3186,9 +3198,11 @@ dependencies = [
  "miette",
  "oci-client",
  "olpc-cjson",
+ "once_cell",
  "prodash",
  "serde",
  "serde_json",
+ "serde_repr",
  "serde_yml",
  "sha2",
  "subst",

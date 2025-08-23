@@ -27,7 +27,7 @@ pub enum BazelError {
     Exit(#[from] ExitError),
     #[error("failed to deserialize cquery output")]
     Serde(#[from] serde_json::Error),
-    #[error("unable to find artifact for target")]
+    #[error("unable to find artifact for target: {0}")]
     MissingArtifact(String),
 }
 

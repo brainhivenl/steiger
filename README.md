@@ -33,6 +33,58 @@ Key difference from Skaffold: Steiger works directly with OCI image layouts, ski
 
 Supports [Ko](https://ko.build/) for building Go applications into container images without Dockerfiles.
 
+### Nix
+Integrates with [Nix](https://nixos.org/) flake outputs that produce OCI images.
+
+Requirements
+
+- Flakes enabled (`--extra-experimental-features 'nix-command flakes'`)
+- `pkgs.ociTools.buildImage` (available via Steiger overlay or [nixpkgs#390624](https://github.com/NixOS/nixpkgs/pull/390624))
+
+<details>
+<summary>Example flake</summary>
+
+```nix
+{
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+    steiger.url = "github:brainhivenl/steiger";
+  };
+
+  outputs = {
+    nixpkgs,
+    steiger,
+    ...
+  }: let
+    system = "x86_64-linux";
+    overlays = [steiger.overlays.ociTools];
+    pkgs = import nixpkgs { inherit system overlays; };
+  in {
+    packages.${system} = {
+      default = pkgs.ociTools.buildImage {
+        name = "hello";
+
+        copyToRoot = pkgs.buildEnv {
+          name = "hello-env";
+          paths = [pkgs.hello];
+          pathsToLink = ["/bin"];
+        };
+
+        config.Cmd = ["/bin/hello"];
+        compressor = "none";
+      };
+    };
+
+    devShells.${system} = {
+      default = pkgs.mkShell {
+        packages = [steiger.packages.${system}.default];
+      };
+    };
+  };
+}
+```
+</details>
+
 ## Build Caching
 
 Steiger delegates caching to the underlying build systems rather than implementing its own cache layer:
@@ -40,19 +92,30 @@ Steiger delegates caching to the underlying build systems rather than implementi
 - **Docker BuildKit**: Leverages BuildKit's native layer caching and build cache
 - **Bazel**: Uses Bazel's extensive caching system (action cache, remote cache, etc.)
 - **Ko**: Benefits from Go's build cache and Ko's layer caching
+- **Nix**: Utilizes Nix's content-addressed store and binary cache system for reproducible, cached builds
 
 This approach avoids cache invalidation issues and performs comparably to Skaffold in cached scenarios, with better performance in some cases.
 
 ## Installation
 
+### Using cargo
+
 ```bash
 cargo install steiger --git https://github.com/brainhivenl/steiger.git
 ```
 
-Or build from source:
+### Using nix
+
+Run directly without installation:
 
 ```bash
-git clone https://github.com/yourusername/steiger
+nix run github:brainhivenl/steiger -- build
+```
+
+### Build from source
+
+```bash
+git clone https://github.com/brainhivenl/steiger
 cd steiger
 cargo build --release
 ```
@@ -82,6 +145,13 @@ services:
     build:
       type: ko
       importPath: ./cmd/service
+
+  flake:
+    build:
+      type: nix
+      systems: ["x86_64-linux"]
+      packages:
+        api: default # attribute path to package e.g. `outputs.packages.<system>.default`
 
 profiles:
   prod:
