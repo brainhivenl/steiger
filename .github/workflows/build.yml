@@ -63,4 +63,4 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - run: |
           chmod +x ./target/release/steiger &&
-            ./target/release/steiger build --repo ghcr.io/brainhivenl/steiger
+            ./target/release/steiger build --repo ghcr.io/brainhivenl
