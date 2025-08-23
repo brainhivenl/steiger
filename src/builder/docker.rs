@@ -1,6 +1,7 @@
 use std::{collections::HashMap, path::PathBuf, process::ExitStatus};
 
 use async_tempfile::TempDir;
+use miette::Diagnostic;
 use prodash::messages::MessageLevel;
 use tokio::process::Command;
 
@@ -11,23 +12,26 @@ use crate::{
     image,
 };
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Diagnostic, thiserror::Error)]
 pub enum DockerError {
     #[error("failed to find docker binary")]
     Path(#[from] which::Error),
     #[error("failed to list buildkit builders")]
+    #[diagnostic(transparent)]
     ListBuilders(ExitError),
     #[error("failed to create buildkit builder")]
+    #[diagnostic(transparent)]
     CreateBuilder(ExitError),
     #[error("IO error")]
     IO(#[from] std::io::Error),
     #[error("failed to create tempdir")]
     TempDir(#[from] async_tempfile::Error),
     #[error("failed to parse image")]
+    #[diagnostic(transparent)]
     Image(#[from] image::ImageError),
     #[error("failed to parse buildkit output")]
     Serde(#[from] serde_json::Error),
-    #[error("failed to run 'docker build': {0:?}")]
+    #[error("failed to run 'docker build': {0}")]
     Build(ExitStatus),
 }
 

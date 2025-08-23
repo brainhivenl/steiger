@@ -3,6 +3,7 @@ use std::{
     sync::Arc,
 };
 
+use miette::Diagnostic;
 use prodash::Progress;
 use tokio::{
     io::AsyncReadExt,
@@ -64,7 +65,7 @@ where
     child.inner.wait().await
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Diagnostic, thiserror::Error)]
 pub enum ExitError {
     #[error("IO error")]
     IO(#[from] std::io::Error),

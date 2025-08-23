@@ -1,5 +1,5 @@
 services:
-  rust:
+  steiger:
     build:
       type: docker
       context: .

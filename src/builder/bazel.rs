@@ -1,5 +1,6 @@
 use std::{collections::HashMap, path::PathBuf, process::ExitStatus};
 
+use miette::Diagnostic;
 use prodash::messages::MessageLevel;
 use tokio::process::Command;
 
@@ -10,17 +11,19 @@ use crate::{
     image,
 };
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Diagnostic, thiserror::Error)]
 pub enum BazelError {
     #[error("failed to find bazel binary")]
     Path(#[from] which::Error),
     #[error("IO error")]
     IO(#[from] std::io::Error),
-    #[error("failed to run 'bazel build': {0:?}")]
+    #[error("failed to run 'bazel build': {0}")]
     Build(ExitStatus),
     #[error("failed to parse image")]
+    #[diagnostic(transparent)]
     Image(#[from] image::ImageError),
     #[error("failed to query for output")]
+    #[diagnostic(transparent)]
     Exit(#[from] ExitError),
     #[error("failed to deserialize cquery output")]
     Serde(#[from] serde_json::Error),

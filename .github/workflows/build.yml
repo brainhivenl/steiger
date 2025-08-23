@@ -1,0 +1,70 @@
+on: [push]
+
+name: build
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    name: Build
+    runs-on: ${{ matrix.target.os }}-latest
+    strategy:
+      matrix:
+        target:
+          - os: ubuntu
+            triple: x86_64-unknown-linux-gnu
+          - os: ubuntu
+            triple: aarch64-unknown-linux-gnu
+          - os: macos
+            triple: aarch64-apple-darwin
+          - os: macos
+            triple: x86_64-apple-darwin
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install prerequisites
+        if: ${{ matrix.target.triple == 'aarch64-unknown-linux-gnu' }}
+        run: |
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+      - name: Setup Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          override: true
+          toolchain: stable
+          target: ${{ matrix.target.triple }}
+          components: rustfmt, clippy
+      - name: Check
+        uses: actions-rs/cargo@v1
+        if: ${{ matrix.target.triple == 'x86_64-unknown-linux-gnu' }}
+        with:
+          command: check
+      - name: Build
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release --target ${{ matrix.target.triple }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: steiger-${{ matrix.target.triple }}
+          path: target/${{ matrix.target.triple }}/release/steiger
+
+  image:
+    needs: [build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Download Linux binary
+        uses: actions/download-artifact@v4
+        with:
+          name: steiger-x86_64-unknown-linux-gnu
+          path: ./target/release
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - run: |
+          chmod +x ./target/release/steiger &&
+            ./target/release/steiger build --repo ghcr.io/brainhivenl
