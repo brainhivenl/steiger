@@ -1,6 +1,5 @@
 services:
   rust:
     build:
-      type: bazel
-      targets:
-        search-api: search-api:image-image
+      type: docker
+      context: .

@@ -72,8 +72,10 @@ async fn detect_platform() -> String {
 #[derive(Debug, Diagnostic, thiserror::Error)]
 enum AppError {
     #[error("failed to read config")]
+    #[diagnostic(transparent)]
     Config(#[from] ConfigError),
-    #[error("failed to build")]
+    #[error(transparent)]
+    #[diagnostic(transparent)]
     Build(Box<cmd::build::Error>),
     #[error("failed to get current dir")]
     CurrentDir(std::io::Error),

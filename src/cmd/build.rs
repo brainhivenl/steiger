@@ -1,6 +1,7 @@
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use docker_credential::{CredentialRetrievalError, DockerCredential};
+use miette::Diagnostic;
 use oci_client::{Client, Reference, client::ClientConfig, secrets::RegistryAuth};
 use tokio::{fs, task::JoinSet};
 
@@ -30,7 +31,7 @@ mod skaffold {
     }
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Diagnostic, thiserror::Error)]
 pub enum WriteError {
     #[error("failed to write to file")]
     IO(#[from] std::io::Error),
@@ -38,17 +39,21 @@ pub enum WriteError {
     Serde(#[from] serde_json::Error),
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Diagnostic, thiserror::Error)]
 pub enum Error {
     #[error("failed to tag")]
+    #[diagnostic(transparent)]
     Tag(#[from] TagError),
     #[error("failed to build")]
+    #[diagnostic(transparent)]
     Build(#[from] BuildError),
     #[error("failed to push")]
+    #[diagnostic(transparent)]
     Push(#[from] PushError),
     #[error("failed to find image for platform")]
     NoImage(String),
     #[error("failed to write output")]
+    #[diagnostic(transparent)]
     WriteOutput(#[from] WriteError),
     #[error("failed to retrieve registry credentials")]
     Credential(#[from] CredentialRetrievalError),

@@ -5,6 +5,7 @@ use crate::{
 };
 
 use futures::TryFutureExt;
+use miette::Diagnostic;
 use prodash::{messages::MessageLevel, tree::Item};
 use tokio::{task::JoinSet, time::Instant};
 
@@ -12,13 +13,16 @@ mod bazel;
 mod docker;
 mod ko;
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Diagnostic, thiserror::Error)]
 pub enum BuildError {
     #[error("ko error")]
+    #[diagnostic(transparent)]
     Ko(#[from] ErrorOf<KoBuilder>),
     #[error("docker error")]
+    #[diagnostic(transparent)]
     Docker(#[from] ErrorOf<DockerBuilder>),
     #[error("bazel error")]
+    #[diagnostic(transparent)]
     Bazel(#[from] ErrorOf<BazelBuilder>),
 }
 

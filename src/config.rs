@@ -1,5 +1,6 @@
 use std::{collections::HashMap, mem, path::Path};
 
+use miette::Diagnostic;
 use serde::Deserialize;
 use serde_yml::Value;
 
@@ -54,7 +55,7 @@ pub struct Service {
     pub build: Build,
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Diagnostic, thiserror::Error)]
 pub enum ConfigError {
     #[error("I/O error")]
     IO(#[from] std::io::Error),

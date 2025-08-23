@@ -1,6 +1,7 @@
 use std::fmt::Debug;
 use std::path::Path;
 
+use miette::Diagnostic;
 use oci_client::{
     client::{Config, ImageLayer},
     manifest::{OciImageIndex, OciImageManifest, Platform},
@@ -13,7 +14,7 @@ use crate::image::blob_store::BlobStore;
 
 mod blob_store;
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Diagnostic, thiserror::Error)]
 pub enum ImageError {
     #[error("IO error")]
     IO(#[from] std::io::Error),

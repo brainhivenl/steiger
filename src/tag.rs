@@ -1,8 +1,9 @@
 use std::convert::Infallible;
 
 use gix::{Head, Repository, refs::Category};
+use miette::Diagnostic;
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Diagnostic, thiserror::Error)]
 pub enum TagError {
     #[error("failed to open git repository")]
     Open(#[from] gix::open::Error),

@@ -1,4 +1,5 @@
 use futures::{StreamExt, TryStreamExt, future, stream};
+use miette::Diagnostic;
 use oci_client::{
     Client, Reference,
     client::PushResponse,
@@ -9,7 +10,7 @@ use prodash::{messages::MessageLevel, tree::Item};
 
 use crate::image::Image;
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Diagnostic, thiserror::Error)]
 pub enum PushError {
     #[error("failed to push image")]
     Oci(#[from] OciDistributionError),

@@ -2,6 +2,7 @@ use std::{path::PathBuf, process::ExitStatus};
 
 use async_tempfile::TempDir;
 use gix::progress::MessageLevel;
+use miette::Diagnostic;
 use prodash::tree::Item;
 use tokio::process::Command;
 
@@ -11,7 +12,7 @@ use crate::{
     exec, image,
 };
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Diagnostic, thiserror::Error)]
 pub enum KoError {
     #[error("IO error")]
     IO(#[from] std::io::Error),
@@ -20,8 +21,9 @@ pub enum KoError {
     #[error("failed to create tempdir")]
     TempDir(#[from] async_tempfile::Error),
     #[error("failed to parse image")]
+    #[diagnostic(transparent)]
     Image(#[from] image::ImageError),
-    #[error("failed to run 'ko build': {0:?}")]
+    #[error("failed to run 'ko build': {0}")]
     Build(ExitStatus),
 }
 
