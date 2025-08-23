@@ -2,7 +2,7 @@ use std::{collections::HashMap, mem, path::Path};
 
 use miette::Diagnostic;
 use serde::Deserialize;
-use serde_yml::Value;
+use serde_yml::{Mapping, Value};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -67,27 +67,25 @@ pub enum ConfigError {
     Profile(String),
 }
 
-fn template(vars: &HashMap<String, String>, config: &mut Value) -> Result<(), subst::Error> {
+fn template(vars: &HashMap<String, String>, config: Value) -> Result<Value, subst::Error> {
     match config {
-        Value::String(s) => {
-            if s.contains('$') {
-                *s = subst::substitute(s, vars)?;
-            }
-        }
-        Value::Sequence(seq) => {
-            for item in seq.iter_mut() {
-                template(vars, item)?;
-            }
-        }
-        Value::Mapping(map) => {
-            for (_, value) in map.iter_mut() {
-                template(vars, value)?;
-            }
-        }
-        _ => {}
+        Value::String(s) => Ok(Value::String(if s.contains('$') {
+            subst::substitute(&s, vars)?
+        } else {
+            s
+        })),
+        Value::Sequence(seq) => seq
+            .into_iter()
+            .map(|c| template(vars, c))
+            .collect::<Result<Vec<_>, _>>()
+            .map(Value::Sequence),
+        Value::Mapping(map) => map
+            .into_iter()
+            .map(|(key, value)| Ok((template(vars, key)?, template(vars, value)?)))
+            .collect::<Result<Mapping, _>>()
+            .map(Value::Mapping),
+        _ => Ok(config),
     }
-
-    Ok(())
 }
 
 pub async fn load_from_path(
@@ -104,7 +102,7 @@ pub async fn load_from_path(
         {
             Some(profile) => {
                 let profile = serde_yml::from_value::<Profile>(mem::take(profile))?;
-                template(&profile.vars, &mut config)?;
+                config = template(&profile.vars, config)?;
             }
             None => return Err(ConfigError::Profile(profile.to_string())),
         };
