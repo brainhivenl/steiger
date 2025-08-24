@@ -18,10 +18,10 @@ pub enum DockerError {
     Path(#[from] which::Error),
     #[error("failed to list buildkit builders")]
     #[diagnostic(transparent)]
-    ListBuilders(ExitError),
+    ListBuilders(#[source] ExitError),
     #[error("failed to create buildkit builder")]
     #[diagnostic(transparent)]
-    CreateBuilder(ExitError),
+    CreateBuilder(#[source] ExitError),
     #[error("IO error")]
     IO(#[from] std::io::Error),
     #[error("failed to create tempdir")]
