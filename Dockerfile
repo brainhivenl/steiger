@@ -2,6 +2,6 @@ FROM scratch
 
 WORKDIR /bin
 
-COPY target/release/steiger /bin
+COPY steiger /bin/steiger
 
 ENTRYPOINT ["/bin/steiger"]
