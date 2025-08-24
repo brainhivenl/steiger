@@ -117,7 +117,20 @@ impl Builder for DockerBuilder {
 
         if !builders.iter().any(|b| b.name == "steiger") {
             progress.message(MessageLevel::Info, "creating buildkit builder");
-            self.create_builder().await?;
+
+            match self.create_builder().await {
+                Err(DockerError::CreateBuilder(ExitError::Status { code: 1, stderr }))
+                    if stderr.contains("ERROR: existing instance for") =>
+                {
+                    progress.message(
+                        MessageLevel::Info,
+                        "buildkit builder exists, assuming remote driver",
+                    );
+                }
+                Err(e) => return Err(e),
+                Ok(()) => {}
+            }
+
             progress.message(MessageLevel::Success, "buildkit builder created");
         } else {
             progress.message(MessageLevel::Info, "using existing buildkit builder");
