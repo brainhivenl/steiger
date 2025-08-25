@@ -46,7 +46,7 @@ This approach avoids cache invalidation issues and performs comparably to Skaffo
 ## Installation
 
 ```bash
-cargo install steiger
+cargo install steiger --git https://github.com/brainhivenl/steiger.git
 ```
 
 Or build from source:
