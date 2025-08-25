@@ -1,5 +1,5 @@
 use crate::{
-    builder::{bazel::BazelBuilder, docker::DockerBuilder, ko::KoBuilder},
+    builder::{bazel::BazelBuilder, docker::DockerBuilder, ko::KoBuilder, nix::NixBuilder},
     config::{Build, Config},
     image::Image,
 };
@@ -12,18 +12,22 @@ use tokio::{task::JoinSet, time::Instant};
 mod bazel;
 mod docker;
 mod ko;
+mod nix;
 
 #[derive(Debug, Diagnostic, thiserror::Error)]
 pub enum BuildError {
     #[error("ko error")]
     #[diagnostic(transparent)]
     Ko(#[from] ErrorOf<KoBuilder>),
-    #[error("docker error")]
-    #[diagnostic(transparent)]
-    Docker(#[from] ErrorOf<DockerBuilder>),
     #[error("bazel error")]
     #[diagnostic(transparent)]
     Bazel(#[from] ErrorOf<BazelBuilder>),
+    #[error("docker error")]
+    #[diagnostic(transparent)]
+    Docker(#[from] ErrorOf<DockerBuilder>),
+    #[error("nix error")]
+    #[diagnostic(transparent)]
+    Nix(#[from] ErrorOf<NixBuilder>),
 }
 
 #[derive(Debug, Default)]
@@ -107,6 +111,7 @@ pub struct MetaBuild {
     ko: Option<KoBuilder>,
     bazel: Option<BazelBuilder>,
     docker: Option<DockerBuilder>,
+    nix: Option<NixBuilder>,
 }
 
 impl MetaBuild {
@@ -116,6 +121,7 @@ impl MetaBuild {
             ko: None,
             bazel: None,
             docker: None,
+            nix: None,
         }
     }
 
@@ -148,6 +154,12 @@ impl MetaBuild {
                     set.spawn(
                         run_builder(&mut self.docker, progress, ctx.with(docker.clone()))?
                             .map_err(BuildError::Docker),
+                    );
+                }
+                Build::Nix(nix) => {
+                    set.spawn(
+                        run_builder(&mut self.nix, progress, ctx.with(nix.clone()))?
+                            .map_err(BuildError::Nix),
                     );
                 }
             };

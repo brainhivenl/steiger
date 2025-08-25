@@ -12,10 +12,10 @@ use tokio::{
 
 use crate::progress;
 
-struct ChildWithStdio {
-    inner: Child,
-    stdout: ChildStdout,
-    stderr: ChildStderr,
+pub struct ChildWithStdio {
+    pub inner: Child,
+    pub stdout: ChildStdout,
+    pub stderr: ChildStderr,
 }
 
 impl ChildWithStdio {
@@ -32,7 +32,7 @@ impl ChildWithStdio {
     }
 }
 
-async fn spawn(cmd: &mut Command) -> Result<ChildWithStdio, std::io::Error> {
+pub async fn spawn(cmd: &mut Command) -> Result<ChildWithStdio, std::io::Error> {
     let mut inner = cmd
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
