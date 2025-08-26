@@ -14,17 +14,17 @@ use crate::{
     tag::{self, TagError},
 };
 
-mod skaffold {
-    use serde::Serialize;
+pub mod output {
+    use serde::{Deserialize, Serialize};
 
-    #[derive(Serialize)]
+    #[derive(Serialize, Deserialize)]
     #[serde(rename_all = "camelCase")]
     pub struct Build {
         pub image_name: String,
         pub tag: String,
     }
 
-    #[derive(Serialize)]
+    #[derive(Serialize, Deserialize)]
     #[serde(rename_all = "camelCase")]
     pub struct Output {
         pub builds: Vec<Build>,
@@ -131,10 +131,10 @@ pub async fn run(
             }
 
             if let Some(path) = output_file {
-                let output = skaffold::Output {
+                let output = output::Output {
                     builds: artifacts
                         .into_iter()
-                        .map(|(image_name, tag)| skaffold::Build { image_name, tag })
+                        .map(|(image_name, tag)| output::Build { image_name, tag })
                         .collect(),
                 };
 

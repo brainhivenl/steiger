@@ -1,5 +1,4 @@
-services:
+build:
   steiger:
-    build:
-      type: docker
-      context: .
+    type: docker
+    context: .
