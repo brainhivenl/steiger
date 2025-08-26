@@ -1,13 +1,13 @@
+use futures::TryFutureExt;
+use miette::Diagnostic;
+use prodash::{messages::MessageLevel, tree::Item};
+use tokio::{task::JoinSet, time::Instant};
+
 use crate::{
     builder::{bazel::BazelBuilder, docker::DockerBuilder, ko::KoBuilder, nix::NixBuilder},
     config::{Build, Config},
     image::Image,
 };
-
-use futures::TryFutureExt;
-use miette::Diagnostic;
-use prodash::{messages::MessageLevel, tree::Item};
-use tokio::{task::JoinSet, time::Instant};
 
 mod bazel;
 mod docker;
@@ -130,14 +130,14 @@ impl MetaBuild {
         let config = Arc::clone(&self.config);
         let mut set = JoinSet::default();
 
-        pb.init(Some(config.services.len()), None);
+        pb.init(Some(config.build.len()), None);
         pb.message(MessageLevel::Info, format!("detected platform: {platform}"));
 
-        for (name, service) in config.services.iter() {
+        for (name, build) in config.build.iter() {
             let progress = pb.add_child(name);
             let ctx = Context::new(name.clone(), platform.to_string(), ());
 
-            match &service.build {
+            match &build {
                 Build::Ko(ko) => {
                     set.spawn(
                         run_builder(&mut self.ko, progress, ctx.with(ko.clone()))?
@@ -175,7 +175,7 @@ impl MetaBuild {
         let elapsed = instant.elapsed();
 
         pb.message(
-            MessageLevel::Info,
+            MessageLevel::Success,
             format!("build completed in {elapsed:?}"),
         );
 

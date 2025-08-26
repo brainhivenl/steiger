@@ -11,7 +11,7 @@ use serde_yml::{Mapping, Value};
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Config {
-    pub services: HashMap<String, Service>,
+    pub build: HashMap<String, Build>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -59,12 +59,6 @@ pub enum Build {
 pub struct Profile {
     #[serde(default, flatten)]
     pub vars: HashMap<String, String>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Service {
-    pub build: Build,
 }
 
 #[derive(Debug, Diagnostic, thiserror::Error)]

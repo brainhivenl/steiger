@@ -125,33 +125,28 @@ cargo build --release
 Create a `steiger.yml` file:
 
 ```yaml
-services:
+build:
   frontend:
-    build:
-      type: docker
-      context: ./frontend
-      dockerfile: Dockerfile.prod # optional, defaults to Dockerfile
-      buildArgs:
-        ENV: ${env} # variable substitution is supported
+    type: docker
+    context: ./frontend
+    dockerfile: Dockerfile.prod # optional, defaults to Dockerfile
+    buildArgs:
+      ENV: ${env} # variable substitution is supported
 
   backend:
-    build:
-      type: bazel
-      targets:
-        app: //cmd/server:image
-        migrations: //cmd/migrations:image
+    type: bazel
+    targets:
+      app: //cmd/server:image
+      migrations: //cmd/migrations:image
 
   go-service:
-    build:
-      type: ko
-      importPath: ./cmd/service
+    type: ko
+    importPath: ./cmd/service
 
   flake:
-    build:
-      type: nix
-      systems: ["x86_64-linux"]
-      packages:
-        api: default # attribute path to package e.g. `outputs.packages.<system>.default`
+    type: nix
+    packages:
+      api: default # attribute path to package e.g. `outputs.packages.<system>.default`
 
 profiles:
   prod:
@@ -177,15 +172,14 @@ oci_image(
 Platform-specific builds:
 
 ```yaml
-services:
+build:
   multi-arch:
-    build:
-      type: bazel
-      platforms:
-        linux/amd64: //platforms:linux_amd64
-        linux/arm64: //platforms:linux_arm64
-      targets:
-        app: //cmd/app:image
+    type: bazel
+    platforms:
+      linux/amd64: //platforms:linux_amd64
+      linux/arm64: //platforms:linux_arm64
+    targets:
+      app: //cmd/app:image
 ```
 
 ## Usage

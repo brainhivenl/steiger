@@ -1,5 +1,4 @@
-services:
+build:
   rust:
-    build:
-      type: docker
-      context: .
+    type: docker
+    context: .
