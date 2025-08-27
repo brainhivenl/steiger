@@ -83,12 +83,12 @@ impl Builder for BazelBuilder {
 
     async fn build(
         self,
-        mut progress: prodash::tree::Item,
         Context {
             service_name,
             platform,
-            input,
-        }: Context<Self::Input>,
+            mut progress,
+        }: Context,
+        input: Self::Input,
     ) -> Result<Output, Self::Error> {
         progress.set_name(&service_name);
         progress.message(MessageLevel::Info, "starting builder");

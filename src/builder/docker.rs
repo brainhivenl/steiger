@@ -8,7 +8,7 @@ use tokio::process::Command;
 use crate::{
     builder::{Builder, Context, Output},
     config::Docker,
-    exec::{self, ExitError},
+    exec::{self, CmdBuilder, ExitError},
     image,
 };
 
@@ -103,12 +103,12 @@ impl Builder for DockerBuilder {
 
     async fn build(
         self,
-        mut progress: prodash::tree::Item,
         Context {
             service_name,
             platform,
-            input,
-        }: Context<Self::Input>,
+            mut progress,
+        }: Context,
+        input: Self::Input,
     ) -> Result<Output, Self::Error> {
         progress.set_name(&service_name);
         progress.message(MessageLevel::Info, "starting builder");
@@ -136,26 +136,23 @@ impl Builder for DockerBuilder {
             progress.message(MessageLevel::Info, "using existing buildkit builder");
         }
 
-        let mut custom_args = vec![];
+        let mut cmd = CmdBuilder::new(&self.binary);
+        cmd.arg("buildx").arg("build");
+
         let build_args = fmt_map(input.build_args, '=');
         let hosts = fmt_map(input.hosts, ':');
 
         for entry in build_args.iter() {
-            custom_args.push("--build-arg");
-            custom_args.push(entry);
+            cmd.flag("--build-arg", entry);
         }
 
         for entry in hosts.iter() {
-            custom_args.push("--add-host");
-            custom_args.push(entry);
+            cmd.flag("--add-host", entry);
         }
 
         let dest = TempDir::new_with_name(&service_name).await?;
         let status = exec::run_with_progress(
-            Command::new(&self.binary)
-                .arg("build")
-                .args(custom_args)
-                .arg("--builder")
+            cmd.arg("--builder")
                 .arg("steiger")
                 .arg("--platform")
                 .arg(&platform)

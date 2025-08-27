@@ -1,4 +1,3 @@
-use futures::TryFutureExt;
 use miette::Diagnostic;
 use prodash::{messages::MessageLevel, tree::Item};
 use tokio::{task::JoinSet, time::Instant};
@@ -43,26 +42,18 @@ impl Output {
     }
 }
 
-pub struct Context<T> {
+pub struct Context {
     pub service_name: String,
     pub platform: String,
-    pub input: T,
+    pub progress: Item,
 }
 
-impl<T> Context<T> {
-    pub fn new(service_name: String, platform: String, input: T) -> Self {
+impl Context {
+    pub fn new(service_name: String, platform: String, progress: Item) -> Self {
         Self {
             service_name,
             platform,
-            input,
-        }
-    }
-
-    pub fn with<I>(self, input: I) -> Context<I> {
-        Context {
-            input,
-            platform: self.platform,
-            service_name: self.service_name,
+            progress,
         }
     }
 }
@@ -74,22 +65,18 @@ pub trait Builder: Clone {
     fn try_init() -> Result<Self, Self::Error>
     where
         Self: Sized;
-    async fn build(
-        self,
-        progress: Item,
-        input: Context<Self::Input>,
-    ) -> Result<Output, Self::Error>;
+    async fn build(self, ctx: Context, input: Self::Input) -> Result<Output, Self::Error>;
 }
 
 type ErrorOf<T> = <T as Builder>::Error;
 
-use std::{collections::HashMap, sync::Arc};
+use std::collections::HashMap;
 
 fn run_builder<B>(
     var: &mut Option<B>,
-    progress: Item,
-    ctx: Context<B::Input>,
-) -> Result<impl Future<Output = Result<Output, <B as Builder>::Error>> + use<B>, BuildError>
+    ctx: Context,
+    input: B::Input,
+) -> Result<impl Future<Output = Result<Output, BuildError>> + use<B>, BuildError>
 where
     B: Builder,
     BuildError: From<<B as Builder>::Error>,
@@ -103,11 +90,11 @@ where
         }
     }?;
 
-    Ok(builder.build(progress, ctx))
+    Ok(async { Ok(builder.build(ctx, input).await?) })
 }
 
 pub struct MetaBuild {
-    config: Arc<Config>,
+    config: Config,
     ko: Option<KoBuilder>,
     bazel: Option<BazelBuilder>,
     docker: Option<DockerBuilder>,
@@ -115,7 +102,7 @@ pub struct MetaBuild {
 }
 
 impl MetaBuild {
-    pub fn new(config: Arc<Config>) -> Self {
+    pub fn new(config: Config) -> Self {
         Self {
             config,
             ko: None,
@@ -127,40 +114,27 @@ impl MetaBuild {
 
     pub async fn build(mut self, mut pb: Item, platform: &str) -> Result<Output, BuildError> {
         let instant = Instant::now();
-        let config = Arc::clone(&self.config);
         let mut set = JoinSet::default();
 
-        pb.init(Some(config.build.len()), None);
+        pb.init(Some(self.config.build.len()), None);
         pb.message(MessageLevel::Info, format!("detected platform: {platform}"));
 
-        for (name, build) in config.build.iter() {
-            let progress = pb.add_child(name);
-            let ctx = Context::new(name.clone(), platform.to_string(), ());
+        for (name, build) in self.config.build {
+            let progress = pb.add_child(&name);
+            let ctx = Context::new(name, platform.to_string(), progress);
 
-            match &build {
+            match build {
                 Build::Ko(ko) => {
-                    set.spawn(
-                        run_builder(&mut self.ko, progress, ctx.with(ko.clone()))?
-                            .map_err(BuildError::Ko),
-                    );
+                    set.spawn(run_builder(&mut self.ko, ctx, ko)?);
                 }
                 Build::Bazel(bazel) => {
-                    set.spawn(
-                        run_builder(&mut self.bazel, progress, ctx.with(bazel.clone()))?
-                            .map_err(BuildError::Bazel),
-                    );
+                    set.spawn(run_builder(&mut self.bazel, ctx, bazel)?);
                 }
                 Build::Docker(docker) => {
-                    set.spawn(
-                        run_builder(&mut self.docker, progress, ctx.with(docker.clone()))?
-                            .map_err(BuildError::Docker),
-                    );
+                    set.spawn(run_builder(&mut self.docker, ctx, docker)?);
                 }
                 Build::Nix(nix) => {
-                    set.spawn(
-                        run_builder(&mut self.nix, progress, ctx.with(nix.clone()))?
-                            .map_err(BuildError::Nix),
-                    );
+                    set.spawn(run_builder(&mut self.nix, ctx, nix)?);
                 }
             };
         }

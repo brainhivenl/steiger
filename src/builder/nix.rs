@@ -161,12 +161,12 @@ pub struct EvalResult {
 
 impl EvalResult {
     async fn build(
-        self,
+        mut self,
         nix_binary: Arc<PathBuf>,
         mut progress: Item,
     ) -> Result<OutPaths, NixError> {
-        if let Some(error) = self.error {
-            progress.message(MessageLevel::Failure, error.clone());
+        if let Some(error) = self.error.take() {
+            progress.message(MessageLevel::Failure, &error);
             return Err(NixError::Eval(error));
         }
 
@@ -262,7 +262,7 @@ impl NixBuilder {
 
             if packages.values().any(|v| v == &attr_path) {
                 progress.init(Some(set.len() + 1), None);
-                let binary = self.nix_binary.clone();
+                let binary = Arc::clone(&self.nix_binary);
                 let progress = progress.add_child(format!("{attr_path} › nix"));
                 set.spawn(drv.build(binary, progress));
             }
@@ -303,12 +303,12 @@ impl Builder for NixBuilder {
 
     async fn build(
         self,
-        mut progress: Item,
         Context {
             service_name,
             platform,
-            input,
-        }: Context<Self::Input>,
+            mut progress,
+        }: Context,
+        input: Self::Input,
     ) -> Result<Output, Self::Error> {
         progress.set_name(&service_name);
         progress.info("starting builder".to_string());

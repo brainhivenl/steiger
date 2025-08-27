@@ -3,7 +3,6 @@ use std::{path::PathBuf, process::ExitStatus};
 use async_tempfile::TempDir;
 use gix::progress::MessageLevel;
 use miette::Diagnostic;
-use prodash::tree::Item;
 use tokio::process::Command;
 
 use crate::{
@@ -47,12 +46,12 @@ impl Builder for KoBuilder {
 
     async fn build(
         self,
-        mut progress: Item,
         Context {
             service_name,
             platform,
-            input,
-        }: Context<Self::Input>,
+            mut progress,
+        }: Context,
+        input: Self::Input,
     ) -> Result<Output, Self::Error> {
         progress.set_name(&service_name);
         progress.message(MessageLevel::Info, "starting builder");

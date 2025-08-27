@@ -1,16 +1,16 @@
-use std::{collections::HashMap, path::PathBuf, sync::Arc};
+use std::{collections::HashMap, mem, path::Path};
 
-use docker_credential::{CredentialRetrievalError, DockerCredential};
+use docker_credential::CredentialRetrievalError;
 use miette::Diagnostic;
-use oci_client::{Client, Reference, client::ClientConfig, secrets::RegistryAuth};
+use oci_client::Reference;
 use tokio::{fs, task::JoinSet};
 
 use crate::{
     builder::{BuildError, MetaBuild},
     config::Config,
     image::Image,
-    parse_host, progress,
-    registry::{PushError, Registry},
+    progress,
+    registry::{self, PushError, Registry},
     tag::{self, TagError},
 };
 
@@ -75,30 +75,26 @@ fn find_image(mut images: Vec<Image>, platform: &str) -> Result<Image, Error> {
 }
 
 pub async fn run(
-    config: Config,
+    mut config: Config,
     platform: String,
     repo: Option<String>,
-    output_file: Option<PathBuf>,
+    output_file: Option<&Path>,
 ) -> Result<(), Error> {
+    let tag = tag::resolve().await?;
     let root = progress::tree();
     let handle = progress::setup_line_renderer(&root);
-    let builder = MetaBuild::new(Arc::new(config));
+    let insecure_registries = mem::take(&mut config.insecure_registries);
+
+    let builder = MetaBuild::new(config);
     let output = builder.build(root.add_child("build"), &platform).await?;
-    let tag = tag::resolve().await?;
 
     match repo {
         Some(repo) => {
-            let host = parse_host(&repo);
-            let auth = match docker_credential::get_credential(host)? {
-                DockerCredential::IdentityToken(_) => unimplemented!(),
-                DockerCredential::UsernamePassword(user, pass) => RegistryAuth::Basic(user, pass),
-            };
-
-            let client = Client::new(ClientConfig::default());
             let mut progress = root.add_child("push");
             progress.init(Some(output.artifacts.len()), None);
 
-            let registry = Registry::new(client, auth);
+            let auth = registry::load_credentials(&repo)?;
+            let registry = Registry::with_config(auth, &insecure_registries);
             let mut artifacts = HashMap::new();
             let mut set = JoinSet::<Result<_, PushError>>::new();
 
