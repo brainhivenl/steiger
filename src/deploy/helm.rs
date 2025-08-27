@@ -1,5 +1,6 @@
 use std::{path::PathBuf, process::ExitStatus};
 
+use heck::ToLowerCamelCase;
 use miette::Diagnostic;
 use prodash::tree::Item;
 
@@ -42,7 +43,7 @@ impl HelmDeployer {
                 "--set",
                 format!(
                     "steiger.{}.image={}",
-                    change_case::camel_case(&build.image_name),
+                    build.image_name.to_lower_camel_case(),
                     build.tag
                 ),
             );
