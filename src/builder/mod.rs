@@ -1,5 +1,5 @@
 use miette::Diagnostic;
-use prodash::{messages::MessageLevel, tree::Item};
+use prodash::tree::Item;
 use tokio::{task::JoinSet, time::Instant};
 
 use crate::{
@@ -117,7 +117,7 @@ impl MetaBuild {
         let mut set = JoinSet::default();
 
         pb.init(Some(self.config.build.len()), None);
-        pb.message(MessageLevel::Info, format!("detected platform: {platform}"));
+        pb.info(format!("detected platform: {platform}"));
 
         for (name, build) in self.config.build {
             let progress = pb.add_child(&name);
@@ -148,10 +148,7 @@ impl MetaBuild {
 
         let elapsed = instant.elapsed();
 
-        pb.message(
-            MessageLevel::Success,
-            format!("build completed in {elapsed:?}"),
-        );
+        pb.done(format!("build completed in {elapsed:?}"));
 
         Ok(output)
     }

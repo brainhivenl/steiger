@@ -2,7 +2,6 @@ use std::{collections::HashMap, path::PathBuf, process::ExitStatus};
 
 use async_tempfile::TempDir;
 use miette::Diagnostic;
-use prodash::messages::MessageLevel;
 use tokio::process::Command;
 
 use crate::{
@@ -111,29 +110,26 @@ impl Builder for DockerBuilder {
         input: Self::Input,
     ) -> Result<Output, Self::Error> {
         progress.set_name(&service_name);
-        progress.message(MessageLevel::Info, "starting builder");
+        progress.info("starting builder");
 
         let builders = self.list_builders().await?;
 
         if !builders.iter().any(|b| b.name == "steiger") {
-            progress.message(MessageLevel::Info, "creating buildkit builder");
+            progress.info("creating buildkit builder");
 
             match self.create_builder().await {
                 Err(DockerError::CreateBuilder(ExitError::Status { code: 1, stderr }))
                     if stderr.contains("ERROR: existing instance for") =>
                 {
-                    progress.message(
-                        MessageLevel::Info,
-                        "buildkit builder exists, assuming remote driver",
-                    );
+                    progress.info("buildkit builder exists, assuming remote driver");
                 }
                 Err(e) => return Err(e),
                 Ok(()) => {}
             }
 
-            progress.message(MessageLevel::Success, "buildkit builder created");
+            progress.done("buildkit builder created");
         } else {
-            progress.message(MessageLevel::Info, "using existing buildkit builder");
+            progress.info("using existing buildkit builder");
         }
 
         let mut cmd = CmdBuilder::new(&self.binary);
@@ -174,18 +170,15 @@ impl Builder for DockerBuilder {
         .await?;
 
         if !status.success() {
-            progress.message(
-                MessageLevel::Failure,
-                format!(
-                    "build failed with exit code: {}",
-                    status.code().unwrap_or_default()
-                ),
-            );
+            progress.fail(format!(
+                "build failed with exit code: {}",
+                status.code().unwrap_or_default()
+            ));
 
             return Err(DockerError::Build(status));
         }
 
-        progress.message(MessageLevel::Success, "build finished".to_string());
+        progress.done("build finished".to_string());
 
         let images = image::load_from_path(dest).await?;
 

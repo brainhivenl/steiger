@@ -1,6 +1,5 @@
 use std::{path::PathBuf, process::ExitStatus};
 
-use gix::progress::MessageLevel;
 use miette::Diagnostic;
 use prodash::tree::Item;
 
@@ -34,10 +33,7 @@ impl HelmDeployer {
         release: &str,
         ctx: &Context<Helm>,
     ) -> Result<(), HelmError> {
-        progress.message(
-            MessageLevel::Info,
-            "upgrade/install helm release".to_string(),
-        );
+        progress.info("upgrade/install helm release");
 
         let mut cmd = CmdBuilder::new(&self.binary);
 
@@ -78,13 +74,10 @@ impl HelmDeployer {
         .await?;
 
         if !status.success() {
-            progress.message(
-                MessageLevel::Failure,
-                format!(
-                    "deployment failed with exit code: {}",
-                    status.code().unwrap_or_default()
-                ),
-            );
+            progress.fail(format!(
+                "deployment failed with exit code: {}",
+                status.code().unwrap_or_default()
+            ));
 
             return Err(HelmError::Install(status));
         }
@@ -124,7 +117,7 @@ impl Deployer for HelmDeployer {
     ) -> Result<(), Self::Error> {
         self.upgrade(&mut progress, &release, &ctx).await?;
 
-        progress.message(MessageLevel::Success, "deployment finished".to_string());
+        progress.done("deployment finished".to_string());
 
         Ok(())
     }

@@ -7,7 +7,7 @@ use oci_client::{
     errors::{OciDistributionError, OciErrorCode},
     secrets::RegistryAuth,
 };
-use prodash::{messages::MessageLevel, tree::Item};
+use prodash::tree::Item;
 
 use crate::image::Image;
 
@@ -74,7 +74,7 @@ impl Registry {
 
     pub async fn push(
         &mut self,
-        progress: Item,
+        mut progress: Item,
         image_ref: &Reference,
         image: Image,
     ) -> Result<Option<PushResponse>, PushError> {
@@ -84,13 +84,13 @@ impl Registry {
         if let Some(digest) = self.try_resolve_digest(&self.auth, image_ref).await? {
             // If the digest matches the image's digest, we can skip pushing
             if digest == image.digest {
-                progress.message(MessageLevel::Info, "image already exists, skipping push");
+                progress.info("image already exists, skipping push");
                 return Ok(None);
             }
         }
 
         progress.init(Some(image.layers.len()), None);
-        progress.message(MessageLevel::Info, "pushing image");
+        progress.info("pushing image");
 
         // Push blobs with cache
         stream::iter(&image.layers)
@@ -134,7 +134,7 @@ impl Registry {
             .push_manifest(image_ref, &image.manifest.into())
             .await?;
 
-        progress.message(MessageLevel::Success, "image pushed");
+        progress.done("image pushed");
 
         Ok(Some(PushResponse {
             config_url,

@@ -39,11 +39,11 @@ pub async fn run(config: Config, input_file: &Path) -> Result<(), Error> {
     let input = read_input(input_file).await?;
     let root = progress::tree();
     let handle = progress::setup_line_renderer(&root);
-    let progress = root.add_child("deploy");
+    let mut progress = root.add_child("deploy");
 
     let mut deploy = MetaDeployer::new(config, Arc::new(input));
 
-    deploy.validate(&progress).await?;
+    deploy.validate(&mut progress).await?;
     deploy.deploy(progress).await?;
 
     handle.shutdown_and_wait();

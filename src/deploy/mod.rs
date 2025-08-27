@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use futures::TryFutureExt;
-use gix::progress::MessageLevel;
 use miette::Diagnostic;
 use prodash::tree::Item;
 use tokio::{task::JoinSet, time::Instant};
@@ -82,8 +81,8 @@ impl MetaDeployer {
         }
     }
 
-    pub async fn validate(&mut self, pb: &Item) -> Result<(), DeployError> {
-        pb.message(MessageLevel::Info, "validating releases");
+    pub async fn validate(&mut self, pb: &mut Item) -> Result<(), DeployError> {
+        pb.info("validating releases");
 
         for release in self.config.deploy.values() {
             match release {
@@ -105,7 +104,7 @@ impl MetaDeployer {
         let mut set = JoinSet::<Result<_, DeployError>>::new();
 
         pb.init(Some(self.config.deploy.len()), None);
-        pb.message(MessageLevel::Info, "starting deployment");
+        pb.info("starting deployment");
 
         for (name, release) in self.config.deploy {
             let progress = pb.add_child(&name);
@@ -127,7 +126,7 @@ impl MetaDeployer {
             pb.inc();
 
             if let Err(e) = result {
-                pb.message(MessageLevel::Failure, "deployment failed");
+                pb.fail("deployment failed");
                 errors.push(e);
             }
         }
@@ -138,10 +137,7 @@ impl MetaDeployer {
 
         let elapsed = instant.elapsed();
 
-        pb.message(
-            MessageLevel::Success,
-            format!("deployment completed in {elapsed:?}"),
-        );
+        pb.done(format!("deployment completed in {elapsed:?}"));
 
         Ok(())
     }

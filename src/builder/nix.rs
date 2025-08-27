@@ -3,7 +3,7 @@ use std::{collections::HashMap, path::PathBuf, process::ExitStatus, sync::Arc};
 use aho_corasick::AhoCorasick;
 use miette::Diagnostic;
 use once_cell::sync::Lazy;
-use prodash::{Progress, messages::MessageLevel, tree::Item};
+use prodash::{Progress, tree::Item};
 use serde::Deserialize;
 use serde_repr::Deserialize_repr;
 use tokio::{
@@ -166,7 +166,7 @@ impl EvalResult {
         mut progress: Item,
     ) -> Result<OutPaths, NixError> {
         if let Some(error) = self.error.take() {
-            progress.message(MessageLevel::Failure, &error);
+            progress.fail(error.clone());
             return Err(NixError::Eval(error));
         }
 
@@ -248,7 +248,7 @@ impl NixBuilder {
             .arg("--flake")
             .arg(format!(".#packages.{system}"));
 
-        progress.message(MessageLevel::Info, format!("using platform: {system}"));
+        progress.info(format!("using platform: {system}"));
 
         let child = exec::spawn(cmd).await?;
         progress::proxy_stdio(child.stderr, progress.add_child("nix").into());
