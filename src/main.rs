@@ -30,34 +30,48 @@ struct Opts {
 
 #[derive(Parser)]
 enum Cmd {
+    /// Build an OCI image.
     Build {
-        #[arg(short, long, help = "OCI registry to use")]
+        /// OCI registry to use.
+        #[arg(short, long)]
         repo: Option<String>,
 
-        #[arg(short, long, help = "Output file location")]
+        /// Output file location.
+        #[arg(short, long)]
         output_file: Option<PathBuf>,
 
-        #[arg(long, help = "Platform selector (e.g. linux/amd64)")]
+        /// Platform selector (e.g. linux/amd64).
+        #[arg(long)]
         platform: Option<String>,
 
-        #[arg(short, long, help = "Profile name")]
+        /// Profile name.
+        #[arg(short, long)]
         profile: Option<String>,
     },
+
+    /// Deploy an OCI image.
     Deploy {
-        #[arg(short, long, help = "Input file location")]
+        /// Input file location.
+        #[arg(short, long)]
         input_file: PathBuf,
 
-        #[arg(short, long, help = "Profile name")]
+        /// Profile name.
+        #[arg(short, long)]
         profile: Option<String>,
     },
+
+    /// Run an OCI image.
     Run {
-        #[arg(short, long, help = "OCI registry to use")]
+        /// OCI registry to use.
+        #[arg(short, long)]
         repo: String,
 
-        #[arg(long, help = "Platform selector (e.g. linux/amd64)")]
+        /// Platform selector (e.g. linux/amd64).
+        #[arg(long)]
         platform: Option<String>,
 
-        #[arg(short, long, help = "Profile name")]
+        /// Profile name.
+        #[arg(short, long)]
         profile: Option<String>,
     },
 }
