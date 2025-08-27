@@ -3192,6 +3192,7 @@ dependencies = [
  "docker_credential",
  "futures",
  "gix",
+ "heck",
  "hex",
  "k8s-openapi",
  "kube",

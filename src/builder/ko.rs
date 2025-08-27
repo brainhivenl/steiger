@@ -1,9 +1,7 @@
 use std::{path::PathBuf, process::ExitStatus};
 
 use async_tempfile::TempDir;
-use gix::progress::MessageLevel;
 use miette::Diagnostic;
-use prodash::tree::Item;
 use tokio::process::Command;
 
 use crate::{
@@ -47,15 +45,15 @@ impl Builder for KoBuilder {
 
     async fn build(
         self,
-        mut progress: Item,
         Context {
             service_name,
             platform,
-            input,
-        }: Context<Self::Input>,
+            mut progress,
+        }: Context,
+        input: Self::Input,
     ) -> Result<Output, Self::Error> {
         progress.set_name(&service_name);
-        progress.message(MessageLevel::Info, "starting builder");
+        progress.info("starting builder");
 
         let dest = TempDir::new_with_name(&service_name).await?;
         let status = exec::run_with_progress(
@@ -72,18 +70,15 @@ impl Builder for KoBuilder {
         .await?;
 
         if !status.success() {
-            progress.message(
-                MessageLevel::Failure,
-                format!(
-                    "build failed with exit code: {}",
-                    status.code().unwrap_or_default()
-                ),
-            );
+            progress.fail(format!(
+                "build failed with exit code: {}",
+                status.code().unwrap_or_default()
+            ));
 
             return Err(KoError::Build(status));
         }
 
-        progress.message(MessageLevel::Success, "build finished".to_string());
+        progress.done("build finished".to_string());
 
         let images = image::load_from_path(dest).await?;
 

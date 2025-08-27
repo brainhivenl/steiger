@@ -1,12 +1,13 @@
+use docker_credential::{CredentialRetrievalError, DockerCredential};
 use futures::{StreamExt, TryStreamExt, future, stream};
 use miette::Diagnostic;
 use oci_client::{
     Client, Reference,
-    client::PushResponse,
+    client::{ClientConfig, ClientProtocol, PushResponse},
     errors::{OciDistributionError, OciErrorCode},
     secrets::RegistryAuth,
 };
-use prodash::{messages::MessageLevel, tree::Item};
+use prodash::tree::Item;
 
 use crate::image::Image;
 
@@ -16,26 +17,50 @@ pub enum PushError {
     Oci(#[from] OciDistributionError),
 }
 
+fn parse_host(repo: &str) -> &str {
+    repo.split('/').next().unwrap_or_default()
+}
+
+pub fn load_credentials(repo: &str) -> Result<RegistryAuth, CredentialRetrievalError> {
+    match docker_credential::get_credential(parse_host(repo)) {
+        Ok(DockerCredential::IdentityToken(_)) => unimplemented!(),
+        Ok(DockerCredential::UsernamePassword(user, pass)) => Ok(RegistryAuth::Basic(user, pass)),
+        Err(
+            CredentialRetrievalError::HelperFailure { .. }
+            | CredentialRetrievalError::ConfigNotFound
+            | CredentialRetrievalError::NoCredentialConfigured,
+        ) => Ok(RegistryAuth::Anonymous),
+        Err(e) => Err(e),
+    }
+}
+
 #[derive(Clone)]
 pub struct Registry {
-    auth: RegistryAuth,
     client: Client,
+    auth: RegistryAuth,
 }
 
 impl Registry {
-    pub fn new(client: Client, auth: RegistryAuth) -> Self {
-        Self { auth, client }
+    pub fn with_config(auth: RegistryAuth, insecure_registies: &[String]) -> Self {
+        let config = ClientConfig {
+            protocol: ClientProtocol::HttpsExcept(
+                [insecure_registies, &["localhost".to_string()]].concat(),
+            ),
+            ..ClientConfig::default()
+        };
+
+        Self {
+            client: Client::new(config),
+            auth,
+        }
     }
 
     async fn try_resolve_digest(
         &self,
+        auth: &RegistryAuth,
         reference: &Reference,
     ) -> Result<Option<String>, OciDistributionError> {
-        match self
-            .client
-            .fetch_manifest_digest(reference, &self.auth)
-            .await
-        {
+        match self.client.fetch_manifest_digest(reference, auth).await {
             Ok(digest) => Ok(Some(digest)),
             // If the manifest is not found, we assume the image does not exist
             Err(OciDistributionError::ImageManifestNotFoundError(_)) => Ok(None),
@@ -49,24 +74,23 @@ impl Registry {
 
     pub async fn push(
         &mut self,
-        progress: Item,
+        mut progress: Item,
         image_ref: &Reference,
         image: Image,
     ) -> Result<Option<PushResponse>, PushError> {
-        if let Some(digest) = self.try_resolve_digest(image_ref).await? {
+        let registry = image_ref.resolve_registry();
+        self.client.store_auth_if_needed(registry, &self.auth).await;
+
+        if let Some(digest) = self.try_resolve_digest(&self.auth, image_ref).await? {
             // If the digest matches the image's digest, we can skip pushing
             if digest == image.digest {
-                progress.message(MessageLevel::Info, "image already exists, skipping push");
+                progress.info("image already exists, skipping push");
                 return Ok(None);
             }
         }
 
         progress.init(Some(image.layers.len()), None);
-        progress.message(MessageLevel::Info, "pushing image");
-
-        self.client
-            .store_auth_if_needed(image_ref.resolve_registry(), &self.auth)
-            .await;
+        progress.info("pushing image");
 
         // Push blobs with cache
         stream::iter(&image.layers)
@@ -110,7 +134,7 @@ impl Registry {
             .push_manifest(image_ref, &image.manifest.into())
             .await?;
 
-        progress.message(MessageLevel::Success, "image pushed");
+        progress.done("image pushed");
 
         Ok(Some(PushResponse {
             config_url,

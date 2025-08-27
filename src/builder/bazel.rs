@@ -1,7 +1,6 @@
 use std::{collections::HashMap, path::PathBuf, process::ExitStatus};
 
 use miette::Diagnostic;
-use prodash::messages::MessageLevel;
 use tokio::process::Command;
 
 use crate::{
@@ -83,22 +82,22 @@ impl Builder for BazelBuilder {
 
     async fn build(
         self,
-        mut progress: prodash::tree::Item,
         Context {
             service_name,
             platform,
-            input,
-        }: Context<Self::Input>,
+            mut progress,
+        }: Context,
+        input: Self::Input,
     ) -> Result<Output, Self::Error> {
         progress.set_name(&service_name);
-        progress.message(MessageLevel::Info, "starting builder");
+        progress.info("starting builder");
 
         let mut root_cmd = Command::new(&self.binary);
         let mut cmd = root_cmd.arg("build");
 
         if let Some(platform) = input.platforms.get(&platform) {
             cmd = cmd.arg(format!("--platforms={platform}"));
-            progress.message(MessageLevel::Info, format!("using platform: {platform}"));
+            progress.info(format!("using platform: {platform}"));
         }
 
         let status = exec::run_with_progress(
@@ -108,19 +107,16 @@ impl Builder for BazelBuilder {
         .await?;
 
         if !status.success() {
-            progress.message(
-                MessageLevel::Failure,
-                format!(
-                    "build failed with exit code: {}",
-                    status.code().unwrap_or_default()
-                ),
-            );
+            progress.fail(format!(
+                "build failed with exit code: {}",
+                status.code().unwrap_or_default()
+            ));
 
             return Err(BazelError::Build(status));
         }
 
-        progress.message(MessageLevel::Success, "build finished".to_string());
-        progress.message(MessageLevel::Info, "gathering output".to_string());
+        progress.done("build finished".to_string());
+        progress.info("gathering output".to_string());
 
         let cquery = self.get_files_output(input.targets.values()).await?;
         let mut artifacts = HashMap::default();

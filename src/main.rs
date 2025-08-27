@@ -1,5 +1,6 @@
 use std::{env, error::Error, path::PathBuf};
 
+use async_tempfile::TempFile;
 use clap::Parser;
 use miette::Diagnostic;
 
@@ -8,6 +9,7 @@ use crate::config::ConfigError;
 mod builder;
 mod cmd;
 mod config;
+mod deploy;
 mod exec;
 mod image;
 mod progress;
@@ -28,23 +30,50 @@ struct Opts {
 
 #[derive(Parser)]
 enum Cmd {
+    /// Build an OCI image.
     Build {
-        #[arg(short, long, help = "OCI registry to use")]
+        /// OCI registry to use.
+        #[arg(short, long)]
         repo: Option<String>,
 
-        #[arg(short, long, help = "Output file location")]
+        /// Output file location.
+        #[arg(short, long)]
         output_file: Option<PathBuf>,
 
-        #[arg(long, help = "Platform selector (e.g. linux/amd64)")]
+        /// Platform selector (e.g. linux/amd64).
+        #[arg(long)]
         platform: Option<String>,
 
-        #[arg(short, long, help = "Profile name")]
+        /// Profile name.
+        #[arg(short, long)]
         profile: Option<String>,
     },
-}
 
-pub fn parse_host(path: &str) -> &str {
-    path.split('/').next().unwrap_or_default()
+    /// Deploy an OCI image.
+    Deploy {
+        /// Input file location.
+        #[arg(short, long)]
+        input_file: PathBuf,
+
+        /// Profile name.
+        #[arg(short, long)]
+        profile: Option<String>,
+    },
+
+    /// Run an OCI image.
+    Run {
+        /// OCI registry to use.
+        #[arg(short, long)]
+        repo: String,
+
+        /// Platform selector (e.g. linux/amd64).
+        #[arg(long)]
+        platform: Option<String>,
+
+        /// Profile name.
+        #[arg(short, long)]
+        profile: Option<String>,
+    },
 }
 
 async fn detect_kube_platform() -> Result<String, Box<dyn Error>> {
@@ -71,16 +100,23 @@ async fn detect_platform() -> String {
 
 #[derive(Debug, Diagnostic, thiserror::Error)]
 enum AppError {
+    #[error("I/O error")]
+    IO(#[from] std::io::Error),
     #[error("failed to read config")]
     #[diagnostic(transparent)]
     Config(#[from] ConfigError),
     #[error(transparent)]
     #[diagnostic(transparent)]
     Build(Box<cmd::build::Error>),
+    #[error(transparent)]
+    #[diagnostic(transparent)]
+    Deploy(#[from] cmd::deploy::Error),
     #[error("failed to get current dir")]
     CurrentDir(std::io::Error),
     #[error("failed to set current dir")]
     SetCurrentDir(std::io::Error),
+    #[error("failed to create temp file")]
+    TempFile(#[from] async_tempfile::Error),
 }
 
 impl From<cmd::build::Error> for AppError {
@@ -108,14 +144,40 @@ async fn run(opts: Opts) -> Result<(), AppError> {
             platform,
         } => {
             let config = config::load_from_path(profile.as_deref(), config_path).await?;
-
             cmd::build::run(
                 config,
                 platform.unwrap_or(detected_platform),
                 repo,
-                output_file,
+                output_file.as_deref(),
             )
             .await?;
+        }
+        Cmd::Deploy {
+            profile,
+            input_file,
+        } => {
+            let config = config::load_from_path(profile.as_deref(), config_path).await?;
+            cmd::deploy::run(config, &input_file).await?;
+        }
+        Cmd::Run {
+            profile,
+            repo,
+            platform,
+        } => {
+            let dest = TempFile::new().await?;
+            let config = config::load_from_path(profile.as_deref(), config_path).await?;
+
+            cmd::build::run(
+                config.clone(),
+                platform.unwrap_or(detected_platform),
+                Some(repo),
+                Some(dest.file_path()),
+            )
+            .await?;
+
+            dest.sync_all().await?;
+
+            cmd::deploy::run(config, dest.file_path()).await?;
         }
     }
 

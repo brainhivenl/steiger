@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use prodash::{
     Progress,
-    messages::MessageLevel,
     render::line::JoinHandle,
     tree::{Root, root::Options},
 };
@@ -41,7 +40,7 @@ where
 
     tokio::spawn(async move {
         while let Ok(Some(line)) = lines.next_line().await {
-            progress.message(MessageLevel::Info, line);
+            progress.info(line);
         }
     });
 }

@@ -3,7 +3,7 @@ use std::{collections::HashMap, path::PathBuf, process::ExitStatus, sync::Arc};
 use aho_corasick::AhoCorasick;
 use miette::Diagnostic;
 use once_cell::sync::Lazy;
-use prodash::{Progress, messages::MessageLevel, tree::Item};
+use prodash::{Progress, tree::Item};
 use serde::Deserialize;
 use serde_repr::Deserialize_repr;
 use tokio::{
@@ -161,12 +161,12 @@ pub struct EvalResult {
 
 impl EvalResult {
     async fn build(
-        self,
+        mut self,
         nix_binary: Arc<PathBuf>,
         mut progress: Item,
     ) -> Result<OutPaths, NixError> {
-        if let Some(error) = self.error {
-            progress.message(MessageLevel::Failure, error.clone());
+        if let Some(error) = self.error.take() {
+            progress.fail(error.clone());
             return Err(NixError::Eval(error));
         }
 
@@ -248,7 +248,7 @@ impl NixBuilder {
             .arg("--flake")
             .arg(format!(".#packages.{system}"));
 
-        progress.message(MessageLevel::Info, format!("using platform: {system}"));
+        progress.info(format!("using platform: {system}"));
 
         let child = exec::spawn(cmd).await?;
         progress::proxy_stdio(child.stderr, progress.add_child("nix").into());
@@ -262,7 +262,7 @@ impl NixBuilder {
 
             if packages.values().any(|v| v == &attr_path) {
                 progress.init(Some(set.len() + 1), None);
-                let binary = self.nix_binary.clone();
+                let binary = Arc::clone(&self.nix_binary);
                 let progress = progress.add_child(format!("{attr_path} › nix"));
                 set.spawn(drv.build(binary, progress));
             }
@@ -303,12 +303,12 @@ impl Builder for NixBuilder {
 
     async fn build(
         self,
-        mut progress: Item,
         Context {
             service_name,
             platform,
-            input,
-        }: Context<Self::Input>,
+            mut progress,
+        }: Context,
+        input: Self::Input,
     ) -> Result<Output, Self::Error> {
         progress.set_name(&service_name);
         progress.info("starting builder".to_string());

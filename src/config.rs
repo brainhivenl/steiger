@@ -8,10 +8,14 @@ use miette::Diagnostic;
 use serde::Deserialize;
 use serde_yml::{Mapping, Value};
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Config {
+    #[serde(default)]
+    pub insecure_registries: Vec<String>,
     pub build: HashMap<String, Build>,
+    #[serde(default)]
+    pub deploy: HashMap<String, Release>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -45,13 +49,31 @@ pub struct Nix {
     pub flake: Option<PathBuf>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum Build {
     Ko(Ko),
     Bazel(Bazel),
     Docker(Docker),
     Nix(Nix),
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Helm {
+    pub path: String,
+    pub namespace: Option<String>,
+    pub timeout: Option<String>,
+    #[serde(default)]
+    pub values: HashMap<String, String>,
+    #[serde(default)]
+    pub values_files: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(tag = "type", rename_all = "camelCase")]
+pub enum Release {
+    Helm(Helm),
 }
 
 #[derive(Debug, Deserialize)]

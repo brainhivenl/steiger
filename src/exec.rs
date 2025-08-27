@@ -1,4 +1,6 @@
 use std::{
+    ffi::OsStr,
+    ops::{Deref, DerefMut},
     process::{ExitStatus, Stdio},
     sync::Arc,
 };
@@ -11,6 +13,54 @@ use tokio::{
 };
 
 use crate::progress;
+
+pub struct CmdBuilder(Command);
+
+pub trait AsArg {
+    fn as_arg(&self) -> impl AsRef<OsStr>;
+}
+
+impl AsArg for &str {
+    fn as_arg(&self) -> impl AsRef<OsStr> {
+        self
+    }
+}
+
+impl AsArg for &String {
+    fn as_arg(&self) -> impl AsRef<OsStr> {
+        self
+    }
+}
+
+impl AsArg for String {
+    fn as_arg(&self) -> impl AsRef<OsStr> {
+        self
+    }
+}
+
+impl CmdBuilder {
+    pub fn new<S: AsRef<OsStr>>(cmd: S) -> Self {
+        Self(Command::new(cmd))
+    }
+
+    pub fn flag(&mut self, arg1: impl AsArg, arg2: impl AsArg) {
+        self.0.arg(arg1.as_arg()).arg(arg2.as_arg());
+    }
+}
+
+impl Deref for CmdBuilder {
+    type Target = Command;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for CmdBuilder {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
 
 pub struct ChildWithStdio {
     pub inner: Child,
