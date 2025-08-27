@@ -6,7 +6,7 @@ use tokio::process::Command;
 use crate::{
     builder::{Builder, Context, Output},
     config::Bazel,
-    exec::{self, ExitError},
+    exec::{self, CmdBuilder, ExitError},
     image,
 };
 
@@ -38,25 +38,31 @@ pub struct BazelBuilder {
 impl BazelBuilder {
     pub async fn get_files_output(
         &self,
+        platform: Option<&String>,
         targets: impl Iterator<Item = &String>,
     ) -> Result<HashMap<String, String>, BazelError> {
+        let mut cmd = CmdBuilder::new(&self.binary);
+        cmd.arg("cquery");
+
+        if let Some(platform) = platform {
+            cmd.arg(format!("--platforms={platform}"));
+        }
+
         // Output the target and it's output
         let output = exec::run_with_output(
-            Command::new(&self.binary)
-                .arg("cquery")
-                .arg(
-                    targets
-                        .map(|target| format!("\"{target}\""))
-                        .collect::<Vec<_>>()
-                        .join(" union "),
-                )
-                .arg("--output=starlark")
-                .arg(
-                    r#"--starlark:expr=json.encode([
+            cmd.arg(
+                targets
+                    .map(|target| format!("\"{target}\""))
+                    .collect::<Vec<_>>()
+                    .join(" union "),
+            )
+            .arg("--output=starlark")
+            .arg(
+                r#"--starlark:expr=json.encode([
                         '{}:{}'.format(target.label.package, target.label.name),
                         [f.path for f in target.files.to_list()][0]
                     ])"#,
-                ),
+            ),
         )
         .await?;
 
@@ -92,10 +98,11 @@ impl Builder for BazelBuilder {
         progress.set_name(&service_name);
         progress.info("starting builder");
 
+        let bazel_platform = input.platforms.get(&platform);
         let mut root_cmd = Command::new(&self.binary);
         let mut cmd = root_cmd.arg("build");
 
-        if let Some(platform) = input.platforms.get(&platform) {
+        if let Some(platform) = bazel_platform {
             cmd = cmd.arg(format!("--platforms={platform}"));
             progress.info(format!("using platform: {platform}"));
         }
@@ -118,7 +125,9 @@ impl Builder for BazelBuilder {
         progress.done("build finished".to_string());
         progress.info("gathering output".to_string());
 
-        let cquery = self.get_files_output(input.targets.values()).await?;
+        let cquery = self
+            .get_files_output(bazel_platform, input.targets.values())
+            .await?;
         let mut artifacts = HashMap::default();
 
         for (target, files) in cquery {
