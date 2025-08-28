@@ -112,6 +112,34 @@ Run directly without installation:
 nix run github:brainhivenl/steiger -- build
 ```
 
+### Using GitHub Actions
+
+Use the official GitHub Action in your workflows:
+
+```yaml
+name: Build and Deploy
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: brainhivenl/steiger-action@v1
+        with:
+          cmd: build
+          args: --repo ghcr.io/my-org/my-project
+          version: v0.0.1
+```
+
+The action supports these inputs:
+
+- `cmd` (required): The steiger command to run (default: `build`)
+- `args` (optional): Arguments to pass to the command
+- `version` (optional): Version of steiger to use (default: `v0.0.1`)
+
 ### Build from source
 
 ```bash
