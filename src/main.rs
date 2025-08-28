@@ -30,47 +30,47 @@ struct Opts {
 
 #[derive(Parser)]
 enum Cmd {
-    /// Build an OCI image.
+    /// Build all artifacts
     Build {
-        /// OCI registry to use.
+        /// OCI registry to use
         #[arg(short, long)]
         repo: Option<String>,
 
-        /// Output file location.
+        /// Output file location
         #[arg(short, long)]
         output_file: Option<PathBuf>,
 
-        /// Platform selector (e.g. linux/amd64).
+        /// Platform selector (e.g. linux/amd64)
         #[arg(long)]
         platform: Option<String>,
 
-        /// Profile name.
+        /// Profile name
         #[arg(short, long)]
         profile: Option<String>,
     },
 
-    /// Deploy an OCI image.
+    /// Deploy artifacts based on the output-file of the build command
     Deploy {
-        /// Input file location.
+        /// Input file location
         #[arg(short, long)]
         input_file: PathBuf,
 
-        /// Profile name.
+        /// Profile name
         #[arg(short, long)]
         profile: Option<String>,
     },
 
-    /// Run an OCI image.
+    /// Run the build and deploy commands in sequence
     Run {
-        /// OCI registry to use.
+        /// OCI registry to use
         #[arg(short, long)]
         repo: String,
 
-        /// Platform selector (e.g. linux/amd64).
+        /// Platform selector (e.g. linux/amd64)
         #[arg(long)]
         platform: Option<String>,
 
-        /// Profile name.
+        /// Profile name
         #[arg(short, long)]
         profile: Option<String>,
     },

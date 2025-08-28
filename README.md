@@ -8,9 +8,7 @@ A container build orchestrator for multi-service projects with native support fo
 - ✅ **Multi-service parallel builds**: Working with real-time progress
 - ✅ **Registry integration**: Push to any OCI-compliant registry
 - ⏳ **Dev mode**: File watching and rebuild-on-change (planned)
-- ⏳ **Deploy**: Native Kubernetes deployment support (planned)
-
-For now, you can use [Skaffold](https://skaffold.dev/) to deploy images built by Steiger using the compatible JSON output format.
+- 🚧 **Deploy**: Native Kubernetes deployment support (works, but needs to be extended)
 
 ## Supported Builders
 
@@ -34,6 +32,7 @@ Key difference from Skaffold: Steiger works directly with OCI image layouts, ski
 Supports [Ko](https://ko.build/) for building Go applications into container images without Dockerfiles.
 
 ### Nix
+
 Integrates with [Nix](https://nixos.org/) flake outputs that produce OCI images.
 
 Requirements
@@ -83,6 +82,7 @@ Requirements
   };
 }
 ```
+
 </details>
 
 ## Build Caching
@@ -148,6 +148,17 @@ build:
     packages:
       api: default # attribute path to package e.g. `outputs.packages.<system>.default`
 
+deploy:
+  brainpod:
+    type: helm
+    path: helm
+    namespace: my-app
+    valuesFiles:
+      - helm/values.yaml
+
+insecureRegistries:
+  - my-registry.localhost:5000
+
 profiles:
   prod:
     env: prod
@@ -201,6 +212,30 @@ This will:
 1. Build all services in parallel
 2. Push to `gcr.io/my-project/{service-name}:latest`
 3. Skip redundant pushes based on image digests
+
+### Deploy
+
+Deploy services to Kubernetes based on the `output-file` from the build command:
+
+```bash
+steiger deploy
+```
+
+The deploy command uses the build metadata to deploy the correct image versions to your Kubernetes cluster.
+
+### Run Full Pipeline
+
+Run the complete pipeline (build, push, and deploy):
+
+```bash
+steiger run --repo gcr.io/my-project
+```
+
+This command combines all steps:
+
+1. Builds all services in parallel
+2. Pushes images to the specified repository
+3. Deploys services using the deployment configuration
 
 ### Generate Build Metadata
 
@@ -262,6 +297,14 @@ gcloud auth configure-docker
 
 # AWS ECR
 aws ecr get-login-password --region us-west-2 | docker login --username AWS --password-stdin $ECR_REGISTRY
+```
+
+For insecure HTTP registries (development environments), configure them in your `steiger.yml`:
+
+```yaml
+insecureRegistries:
+  - localhost:5000
+  - dev-registry.local:8080
 ```
 
 ## Architecture
