@@ -1,32 +1,16 @@
 use std::convert::Infallible;
 
-use gix::{Head, Repository, refs::Category};
+use gix::{Repository, refs::Category};
 use miette::Diagnostic;
 
 #[derive(Debug, Diagnostic, thiserror::Error)]
-pub enum TagError {
+pub enum GitError {
     #[error("failed to open git repository")]
     Open(#[from] gix::open::Error),
     #[error("failed to resolve HEAD reference")]
     FindRef(#[from] gix::reference::find::existing::Error),
     #[error("failed to retrieve dirty status")]
     Dirty(#[from] gix::status::is_dirty::Error),
-    #[error("unable to find tag")]
-    NotFound,
-}
-
-fn parse_name(head: &mut Head<'_>) -> Result<String, TagError> {
-    if let Some(ref_name) = head.referent_name() {
-        if let Some((Category::Tag, name)) = ref_name.category_and_short_name() {
-            return Ok(name.to_string());
-        }
-    }
-
-    if let Ok(commit) = head.peel_to_commit_in_place() {
-        return Ok(commit.id.to_hex_with_len(6).to_string());
-    }
-
-    Err(TagError::NotFound)
 }
 
 // Copied from gix but takes untracked files into account
@@ -62,14 +46,30 @@ fn is_dirty(repo: &Repository) -> Result<bool, gix::status::is_dirty::Error> {
         .is_some())
 }
 
-pub async fn resolve() -> Result<String, TagError> {
+#[derive(Default)]
+pub struct State {
+    pub dirty: bool,
+    pub tag: Option<String>,
+    pub commit: String,
+}
+
+pub async fn state() -> Result<State, GitError> {
     let repo = gix::open(".")?;
     let mut head = repo.head()?;
-    let name = parse_name(&mut head)?;
+    let mut state = State {
+        dirty: is_dirty(&repo)?,
+        ..State::default()
+    };
 
-    if is_dirty(&repo)? {
-        return Ok(format!("{name}-dirty"));
+    if let Some(ref_name) = head.referent_name() {
+        if let Some((Category::Tag, name)) = ref_name.category_and_short_name() {
+            state.tag = Some(name.to_string());
+        }
     }
 
-    Ok(name)
+    if let Ok(commit) = head.peel_to_commit_in_place() {
+        state.commit = commit.id.to_hex().to_string();
+    }
+
+    Ok(state)
 }

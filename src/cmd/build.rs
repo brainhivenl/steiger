@@ -8,10 +8,10 @@ use tokio::{fs, task::JoinSet};
 use crate::{
     builder::{BuildError, MetaBuild},
     config::Config,
+    git,
     image::Image,
     progress,
     registry::{self, PushError, Registry},
-    tag::{self, TagError},
 };
 
 pub mod output {
@@ -41,9 +41,9 @@ pub enum WriteError {
 
 #[derive(Debug, Diagnostic, thiserror::Error)]
 pub enum Error {
-    #[error("failed to tag")]
+    #[error(transparent)]
     #[diagnostic(transparent)]
-    Tag(#[from] TagError),
+    Git(#[from] git::GitError),
     #[error("failed to build")]
     #[diagnostic(transparent)]
     Build(#[from] BuildError),
@@ -80,15 +80,15 @@ pub async fn run(
     repo: Option<String>,
     output_file: Option<&Path>,
 ) -> Result<(), Error> {
-    let tag = tag::resolve().await?;
     let root = progress::tree();
     let handle = progress::setup_line_renderer(&root);
     let insecure_registries = mem::take(&mut config.insecure_registries);
 
+    let (tag, default_repo) = (config.tag_format.clone(), config.default_repo.take());
     let builder = MetaBuild::new(config);
     let output = builder.build(root.add_child("build"), &platform).await?;
 
-    match repo {
+    match repo.or(default_repo) {
         Some(repo) => {
             let mut progress = root.add_child("push");
             progress.init(Some(output.artifacts.len()), None);
