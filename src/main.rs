@@ -11,10 +11,10 @@ mod cmd;
 mod config;
 mod deploy;
 mod exec;
+mod git;
 mod image;
 mod progress;
 mod registry;
-mod tag;
 
 #[derive(Parser)]
 struct Opts {
@@ -64,7 +64,7 @@ enum Cmd {
     Run {
         /// OCI registry to use
         #[arg(short, long)]
-        repo: String,
+        repo: Option<String>,
 
         /// Platform selector (e.g. linux/amd64)
         #[arg(long)]
@@ -117,6 +117,9 @@ enum AppError {
     SetCurrentDir(std::io::Error),
     #[error("failed to create temp file")]
     TempFile(#[from] async_tempfile::Error),
+    #[error("no repository specified")]
+    #[diagnostic(help("either set in config or pass via --repo"))]
+    RepoRequired,
 }
 
 impl From<cmd::build::Error> for AppError {
@@ -144,6 +147,7 @@ async fn run(opts: Opts) -> Result<(), AppError> {
             platform,
         } => {
             let config = config::load_from_path(profile.as_deref(), config_path).await?;
+
             cmd::build::run(
                 config,
                 platform.unwrap_or(detected_platform),
@@ -167,10 +171,14 @@ async fn run(opts: Opts) -> Result<(), AppError> {
             let dest = TempFile::new().await?;
             let config = config::load_from_path(profile.as_deref(), config_path).await?;
 
+            if repo.is_none() && config.default_repo.is_none() {
+                return Err(AppError::RepoRequired);
+            }
+
             cmd::build::run(
                 config.clone(),
                 platform.unwrap_or(detected_platform),
-                Some(repo),
+                repo,
                 Some(dest.file_path()),
             )
             .await?;
