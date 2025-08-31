@@ -198,7 +198,7 @@ For Bazel builds, ensure your targets produce OCI image layouts:
 
 ```python
 # BUILD.bazel
-load("@rules_oci//oci:defs.bzl", "oci_image", "oci_tarball")
+load("@rules_oci//oci:defs.bzl", "oci_image")
 
 oci_image(
     name = "image",

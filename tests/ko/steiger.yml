@@ -1,0 +1,4 @@
+build:
+  hello:
+    type: ko
+    importPath: ./cmd

@@ -1,0 +1,5 @@
+build:
+  hello:
+    type: nix
+    packages:
+      hello: default
