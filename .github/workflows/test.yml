@@ -53,4 +53,4 @@ jobs:
       - name: Set up Steiger
         run: cargo install --path .
       - name: Run tests
-        run: steiger --dir tests/${{ matrix.test }} build --profile ${{ matrix.profile }}
+        run: steiger --dir tests/${{ matrix.test }} build

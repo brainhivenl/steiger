@@ -111,8 +111,6 @@ enum AppError {
     #[error(transparent)]
     #[diagnostic(transparent)]
     Deploy(#[from] cmd::deploy::Error),
-    #[error("failed to get current dir")]
-    CurrentDir(std::io::Error),
     #[error("failed to set current dir")]
     SetCurrentDir(std::io::Error),
     #[error("failed to create temp file")]
@@ -129,15 +127,12 @@ impl From<cmd::build::Error> for AppError {
 }
 
 async fn run(opts: Opts) -> Result<(), AppError> {
-    let dir = opts
-        .dir
-        .map(Ok)
-        .unwrap_or_else(env::current_dir)
-        .map_err(AppError::CurrentDir)?;
-    let config_path = opts.config.unwrap_or_else(|| dir.join("steiger.yml"));
-    let detected_platform = detect_platform().await;
+    if let Some(dir) = opts.dir {
+        env::set_current_dir(&dir).map_err(AppError::SetCurrentDir)?;
+    }
 
-    env::set_current_dir(&dir).map_err(AppError::SetCurrentDir)?;
+    let config_path = opts.config.unwrap_or_else(|| "steiger.yml".into());
+    let detected_platform = detect_platform().await;
 
     match opts.cmd {
         Cmd::Build {

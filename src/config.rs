@@ -10,7 +10,7 @@ use serde_yml::{Mapping, Value};
 
 use crate::git;
 
-const DEFAULT_TAG_FORMAT: &str = "${gitTag:$gitShortCommit}${gitDirty:}";
+const DEFAULT_TAG_FORMAT: &str = "${gitTag:${gitShortCommit:unknown}}${gitDirty:}";
 
 #[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -128,11 +128,15 @@ fn template(vars: &HashMap<String, String>, config: Value) -> Result<Value, subs
 fn extract_git_vars(state: git::State) -> HashMap<String, String> {
     let mut vars = HashMap::new();
 
-    vars.insert("gitShortCommit".to_string(), state.commit[0..6].to_string());
-    vars.insert("gitCommit".to_string(), state.commit);
+    if let Some(commit) = state.commit {
+        vars.insert("gitShortCommit".to_string(), commit[0..6].to_string());
+        vars.insert("gitCommit".to_string(), commit);
+    }
+
     if let Some(tag) = state.tag {
         vars.insert("gitTag".to_string(), tag);
     }
+
     if state.dirty {
         vars.insert("gitDirty".to_string(), "-dirty".to_string());
     }

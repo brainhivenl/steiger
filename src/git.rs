@@ -50,11 +50,16 @@ fn is_dirty(repo: &Repository) -> Result<bool, gix::status::is_dirty::Error> {
 pub struct State {
     pub dirty: bool,
     pub tag: Option<String>,
-    pub commit: String,
+    pub commit: Option<String>,
 }
 
 pub async fn state() -> Result<State, GitError> {
-    let repo = gix::open(".")?;
+    let repo = match gix::open(".") {
+        Ok(repo) => repo,
+        Err(gix::open::Error::NotARepository { .. }) => return Ok(State::default()),
+        Err(e) => return Err(GitError::Open(e)),
+    };
+
     let mut head = repo.head()?;
     let mut state = State {
         dirty: is_dirty(&repo)?,
@@ -68,7 +73,7 @@ pub async fn state() -> Result<State, GitError> {
     }
 
     if let Ok(commit) = head.peel_to_commit_in_place() {
-        state.commit = commit.id.to_hex().to_string();
+        state.commit = Some(commit.id.to_hex().to_string());
     }
 
     Ok(state)
