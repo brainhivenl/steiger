@@ -1,0 +1,56 @@
+on: [push]
+
+name: test
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        test: [ko, docker, bazel, nix]
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-go@v5
+        if: ${{ matrix.test == 'ko' }}
+        with:
+          go-version: "1.24.5"
+      - uses: ko-build/setup-ko@v0.8
+        if: ${{ matrix.test == 'ko' }}
+      - uses: cachix/install-nix-action@v31
+        if: ${{ matrix.test == 'nix' }}
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+      - uses: bazelbuild/setup-bazelisk@v3
+        if: ${{ matrix.test == 'bazel' }}
+      - name: Install Nix prerequisites
+        if: ${{ matrix.test == 'nix' }}
+        run: nix-env -i nix-eval-jobs -f '<nixpkgs>'
+      - name: Install Bazel prerequisites
+        if: ${{ matrix.test == 'bazel' }}
+        run: |
+          curl -LO http://security.ubuntu.com/ubuntu/pool/universe/n/ncurses/libtinfo5_6.3-2ubuntu0.1_amd64.deb &&
+            sudo dpkg -i libtinfo5_6.3-2ubuntu0.1_amd64.deb &&
+            sudo apt-get update &&
+            sudo apt-get install -y g++
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ env.RUST_TARGET }}
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Cargo cache
+        id: cache-cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            target
+            ~/.cargo
+          key: ${{ runner.os }}-cargo
+      - name: Set up Steiger
+        run: cargo install --path .
+      - name: Run tests
+        run: steiger --dir tests/${{ matrix.test }} build

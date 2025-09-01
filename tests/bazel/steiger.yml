@@ -1,0 +1,7 @@
+build:
+  hello:
+    type: bazel
+    targets:
+      hello: :hello_image
+    platforms:
+      linux/amd64: :linux-amd64

@@ -1,0 +1,18 @@
+module(
+    name = "hello_world_oci",
+    version = "1.0.0",
+)
+
+bazel_dep(name = "rules_oci", version = "2.2.0")
+bazel_dep(name = "rules_pkg", version = "1.0.1")
+bazel_dep(name = "platforms", version = "1.0.0")
+
+oci = use_extension("@rules_oci//oci:extensions.bzl", "oci")
+
+oci.pull(
+    name = "alpine",
+    image = "alpine:3.19",
+    platforms = ["linux/amd64", "linux/arm64"],
+)
+
+use_repo(oci, "alpine")
