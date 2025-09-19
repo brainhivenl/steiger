@@ -229,23 +229,36 @@ impl NixBuilder {
         &self,
         mut progress: Item,
         set: &mut JoinSet<Result<OutPaths, NixError>>,
+        input: &Nix,
         system: &str,
         output_systems: &[String],
-        packages: &HashMap<String, String>,
     ) -> Result<(), NixError> {
-        let Some(system) = output_systems.iter().find(|s| s == &&system) else {
+        let build_system = if input.force_host_platform {
+            self.current_system().await?
+        } else {
+            system.to_string()
+        };
+
+        if !output_systems.iter().any(|s| s == &build_system) {
             return Ok(());
         };
 
         let mut root_cmd = Command::new(&self.eval_binary);
-        let cmd = root_cmd
+        let mut cmd = root_cmd
             .arg("--verbose")
             .arg("--log-format")
             .arg("internal-json")
             .arg("--gc-roots-dir")
             .arg(std::env::temp_dir())
             .arg("--flake")
-            .arg(format!(".#packages.{system}"));
+            .arg(format!(".#packages.{build_system}"));
+
+        if input.force_host_platform {
+            cmd = cmd
+                .env_clear()
+                .env("STEIGER_TARGET_SYSTEM", system)
+                .arg("--impure");
+        }
 
         progress.info(format!("using platform: {system}"));
 
@@ -259,7 +272,7 @@ impl NixBuilder {
             let drv: EvalResult = serde_json::from_str(&line)?;
             let attr_path = drv.attr_path.join(".");
 
-            if packages.values().any(|v| v == &attr_path) {
+            if input.packages.values().any(|v| v == &attr_path) {
                 progress.init(Some(set.len() + 1), None);
                 let binary = Arc::clone(&self.nix_binary);
                 let progress = progress.add_child(format!("{attr_path} › nix"));
@@ -333,18 +346,13 @@ impl Builder for NixBuilder {
         let systems = self.detect_systems(flake_path).await?;
 
         let mut set = JoinSet::default();
-        let build_platform = if input.force_host_platform {
-            self.current_system().await?
-        } else {
-            try_system(&platform)?
-        };
 
         self.eval(
             progress.add_child("eval"),
             &mut set,
-            &build_platform,
+            &input,
+            &try_system(&platform)?,
             &systems,
-            &input.packages,
         )
         .await?;
 
