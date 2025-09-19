@@ -13,7 +13,7 @@
     overlays = [steiger.overlays.ociTools];
     pkgs = import nixpkgs { inherit system overlays; };
   in {
-    packages.${system} = {
+    steigerImages.${system} = {
       default = pkgs.ociTools.buildImage {
         name = "hello";
 

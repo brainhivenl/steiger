@@ -49,11 +49,26 @@ pub struct Ko {
     pub import_path: Option<String>,
 }
 
+#[derive(Clone, Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum PlatformStrategy {
+    #[default]
+    Native,
+    CrossSystem,
+}
+
+fn default_flake_path() -> PathBuf {
+    PathBuf::from(".")
+}
+
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Nix {
     pub packages: HashMap<String, String>,
-    pub flake: Option<PathBuf>,
+    #[serde(default = "default_flake_path")]
+    pub flake: PathBuf,
+    #[serde(default)]
+    pub platform_strategy: PlatformStrategy,
 }
 
 #[derive(Debug, Deserialize, Clone)]

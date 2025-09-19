@@ -23,6 +23,15 @@
         system: fun (import nixpkgs {inherit system;})
       );
   in {
+    lib = {
+      defaultSystems = ["aarch64-darwin" "x86_64-darwin" "x86_64-linux" "aarch64-linux"];
+
+      eachCrossSystem = systems: packages:
+        nixpkgs.lib.genAttrs systems (localSystem:
+          nixpkgs.lib.genAttrs systems (crossSystem:
+            packages localSystem crossSystem));
+    };
+
     packages = forEachSystem (
       pkgs: let
         craneLib = crane.mkLib pkgs;
