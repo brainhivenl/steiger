@@ -54,6 +54,8 @@ pub struct Ko {
 pub struct Nix {
     pub packages: HashMap<String, String>,
     pub flake: Option<PathBuf>,
+    #[serde(default)]
+    pub force_host_platform: bool,
 }
 
 #[derive(Debug, Deserialize, Clone)]

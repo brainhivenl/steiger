@@ -229,12 +229,11 @@ impl NixBuilder {
         &self,
         mut progress: Item,
         set: &mut JoinSet<Result<OutPaths, NixError>>,
-        platform: &str,
-        systems: &[String],
+        system: &str,
+        output_systems: &[String],
         packages: &HashMap<String, String>,
     ) -> Result<(), NixError> {
-        let system = try_system(platform)?;
-        let Some(system) = systems.iter().find(|s| s == &&system) else {
+        let Some(system) = output_systems.iter().find(|s| s == &&system) else {
             return Ok(());
         };
 
@@ -283,6 +282,19 @@ impl NixBuilder {
         let stdout = exec::run_with_output(cmd).await?;
         Ok(serde_json::from_str(&stdout)?)
     }
+
+    async fn current_system(&self) -> Result<String, NixError> {
+        let mut root_cmd = Command::new(self.nix_binary.as_os_str());
+        let cmd = root_cmd
+            .arg("eval")
+            .arg("--impure")
+            .arg("--raw")
+            .arg("--expr")
+            .arg("builtins.currentSystem");
+
+        let stdout = exec::run_with_output(cmd).await?;
+        Ok(stdout)
+    }
 }
 
 impl Builder for NixBuilder {
@@ -321,11 +333,16 @@ impl Builder for NixBuilder {
         let systems = self.detect_systems(flake_path).await?;
 
         let mut set = JoinSet::default();
+        let build_platform = if input.force_host_platform {
+            self.current_system().await?
+        } else {
+            try_system(&platform)?
+        };
 
         self.eval(
             progress.add_child("eval"),
             &mut set,
-            &platform,
+            &build_platform,
             &systems,
             &input.packages,
         )
