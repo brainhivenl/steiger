@@ -229,24 +229,36 @@ impl NixBuilder {
         &self,
         mut progress: Item,
         set: &mut JoinSet<Result<OutPaths, NixError>>,
-        platform: &str,
-        systems: &[String],
-        packages: &HashMap<String, String>,
+        input: &Nix,
+        system: &str,
+        output_systems: &[String],
     ) -> Result<(), NixError> {
-        let system = try_system(platform)?;
-        let Some(system) = systems.iter().find(|s| s == &&system) else {
+        let build_system = if input.force_host_platform {
+            self.current_system().await?
+        } else {
+            system.to_string()
+        };
+
+        if !output_systems.iter().any(|s| s == &build_system) {
             return Ok(());
         };
 
         let mut root_cmd = Command::new(&self.eval_binary);
-        let cmd = root_cmd
+        let mut cmd = root_cmd
             .arg("--verbose")
             .arg("--log-format")
             .arg("internal-json")
             .arg("--gc-roots-dir")
             .arg(std::env::temp_dir())
             .arg("--flake")
-            .arg(format!(".#packages.{system}"));
+            .arg(format!(".#packages.{build_system}"));
+
+        if input.force_host_platform {
+            cmd = cmd
+                .env_clear()
+                .env("STEIGER_TARGET_SYSTEM", system)
+                .arg("--impure");
+        }
 
         progress.info(format!("using platform: {system}"));
 
@@ -260,7 +272,7 @@ impl NixBuilder {
             let drv: EvalResult = serde_json::from_str(&line)?;
             let attr_path = drv.attr_path.join(".");
 
-            if packages.values().any(|v| v == &attr_path) {
+            if input.packages.values().any(|v| v == &attr_path) {
                 progress.init(Some(set.len() + 1), None);
                 let binary = Arc::clone(&self.nix_binary);
                 let progress = progress.add_child(format!("{attr_path} › nix"));
@@ -282,6 +294,19 @@ impl NixBuilder {
 
         let stdout = exec::run_with_output(cmd).await?;
         Ok(serde_json::from_str(&stdout)?)
+    }
+
+    async fn current_system(&self) -> Result<String, NixError> {
+        let mut root_cmd = Command::new(self.nix_binary.as_os_str());
+        let cmd = root_cmd
+            .arg("eval")
+            .arg("--impure")
+            .arg("--raw")
+            .arg("--expr")
+            .arg("builtins.currentSystem");
+
+        let stdout = exec::run_with_output(cmd).await?;
+        Ok(stdout)
     }
 }
 
@@ -325,9 +350,9 @@ impl Builder for NixBuilder {
         self.eval(
             progress.add_child("eval"),
             &mut set,
-            &platform,
+            &input,
+            &try_system(&platform)?,
             &systems,
-            &input.packages,
         )
         .await?;
 
