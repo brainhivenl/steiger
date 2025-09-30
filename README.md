@@ -59,7 +59,7 @@ Requirements
     overlays = [steiger.overlays.ociTools];
     pkgs = import nixpkgs { inherit system overlays; };
   in {
-    packages.${system} = {
+    steigerImages.${system} = {
       default = pkgs.ociTools.buildImage {
         name = "hello";
 
@@ -79,6 +79,127 @@ Requirements
         packages = [steiger.packages.${system}.default];
       };
     };
+  };
+}
+```
+
+</details>
+
+#### Cross-compilation
+
+Steiger provides a nested outputs structure for organizing packages when you need to
+configure cross-compilation yourself using specialized tools like crane for Rust projects.
+
+##### Configuration
+
+Enable the nested path structure by adding the following to your `steiger.yaml`:
+
+```yaml
+build:
+  services:
+    type: nix
+    platformStrategy: crossSystem
+    packages:
+      service: default
+```
+
+This changes how packages should be organized in your flake outputs,
+creating a nested structure that separates build host and target systems.
+
+##### Attribute Path Structure
+
+When `platformStrategy: crossSystem` is enabled, packages must be organized as:
+`<flake-path>#steigerImages.<host-system>.<target-system>.<package-name>`
+
+Examples:
+
+- `#steigerImages.x86_64-linux.aarch64-linux.default` - Build on x86_64-linux, targeting aarch64-linux
+- `#steigerImages.aarch64-darwin.x86_64-linux.default` - Build on aarch64-darwin, targeting x86_64-linux
+- `#steigerImages.x86_64-linux.x86_64-linux.default` - Native build on x86_64-linux
+
+This nested structure allows you to:
+
+- Build for all combinations of host and target systems
+- Configure your own cross-compilation toolchains
+- Maintain clear separation between build-time and runtime dependencies
+
+<details>
+<summary>Example of rust cross-compilation with crane</summary>
+
+```nix
+{
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+    steiger.url = "github:brainhivenl/steiger";
+    crane.url = "github:ipetkov/crane";
+    rust-overlay = {
+      url = "github:oxalica/rust-overlay";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+  };
+
+  outputs = {
+    nixpkgs,
+    steiger,
+    crane,
+    rust-overlay,
+    ...
+  }: let
+    systems = ["aarch64-darwin" "x86_64-darwin" "x86_64-linux" "aarch64-linux"];
+    overlays = [steiger.overlays.ociTools (import rust-overlay)];
+
+    # for more information see:
+    # https://github.com/ipetkov/crane/blob/master/examples/cross-rust-overlay/flake.nix
+    crateExpression = {
+      craneLib,
+      openssl,
+      libiconv,
+      lib,
+      pkg-config,
+      stdenv,
+    }:
+      craneLib.buildPackage {
+        src = craneLib.cleanCargoSource ./.;
+        strictDeps = true;
+
+        nativeBuildInputs =
+          [pkg-config]
+          ++ lib.optionals stdenv.buildPlatform.isDarwin [libiconv];
+
+        buildInputs = [openssl];
+      };
+  in {
+    steigerImages = steiger.lib.eachCrossSystem systems (localSystem: crossSystem: let
+      pkgs = import nixpkgs {
+        system = localSystem;
+        inherit overlays;
+      };
+      pkgsCross = import nixpkgs {
+        inherit localSystem crossSystem overlays;
+      };
+
+      craneLib = crane.mkLib pkgsCross;
+      package = pkgsCross.callPackage crateExpression {inherit craneLib;};
+    in {
+      default = pkgs.ociTools.buildImage {
+        name = "my-service";
+
+        copyToRoot = pkgsCross.buildEnv {
+          name = "service-env";
+          paths = [
+            package
+            pkgs.dockerTools.caCertificates
+          ];
+          pathsToLink = [
+            "/bin"
+            "/etc"
+          ];
+        };
+
+        config.Cmd = ["/bin/${package.pname}"];
+        compressor = "none";
+      };
+    });
   };
 }
 ```

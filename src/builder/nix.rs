@@ -14,9 +14,8 @@ use tokio::{
 use which::which;
 
 use crate::{
-    builder::Context,
-    builder::{Builder, Output},
-    config::Nix,
+    builder::{Builder, Context, Output},
+    config::{Nix, PlatformStrategy},
     exec::{self, ExitError},
     image, progress,
 };
@@ -46,6 +45,8 @@ pub enum NixError {
     UnsupportedPlatform(String),
     #[error("unable to find artifact for target: {0}")]
     MissingArtifact(String),
+    #[error("unable to find package for platform: {0}")]
+    MissingPackage(String),
 }
 
 type OutPaths = HashMap<String, PathBuf>;
@@ -224,18 +225,31 @@ pub struct NixBuilder {
     eval_binary: PathBuf,
 }
 
+const IMAGE_OUTPUTS_PATH: &str = "steigerImages";
+
 impl NixBuilder {
     async fn eval(
         &self,
         mut progress: Item,
         set: &mut JoinSet<Result<OutPaths, NixError>>,
-        platform: &str,
-        systems: &[String],
-        packages: &HashMap<String, String>,
+        input: &Nix,
+        system: &str,
     ) -> Result<(), NixError> {
-        let system = try_system(platform)?;
-        let Some(system) = systems.iter().find(|s| s == &&system) else {
-            return Ok(());
+        let flake_path = input.flake.to_string_lossy();
+        let attr_path = match input.platform_strategy {
+            PlatformStrategy::Native => IMAGE_OUTPUTS_PATH.to_string(),
+            PlatformStrategy::CrossSystem => {
+                [IMAGE_OUTPUTS_PATH, &self.current_system().await?].join(".")
+            }
+        };
+
+        if !self
+            .detect_output_systems(&flake_path, &attr_path)
+            .await?
+            .iter()
+            .any(|s| s.as_str() == system)
+        {
+            return Err(NixError::MissingPackage(system.to_string()));
         };
 
         let mut root_cmd = Command::new(&self.eval_binary);
@@ -246,7 +260,7 @@ impl NixBuilder {
             .arg("--gc-roots-dir")
             .arg(std::env::temp_dir())
             .arg("--flake")
-            .arg(format!(".#packages.{system}"));
+            .arg(format!("{flake_path}#{attr_path}.{system}"));
 
         progress.info(format!("using platform: {system}"));
 
@@ -260,7 +274,7 @@ impl NixBuilder {
             let drv: EvalResult = serde_json::from_str(&line)?;
             let attr_path = drv.attr_path.join(".");
 
-            if packages.values().any(|v| v == &attr_path) {
+            if input.packages.values().any(|v| v == &attr_path) {
                 progress.init(Some(set.len() + 1), None);
                 let binary = Arc::clone(&self.nix_binary);
                 let progress = progress.add_child(format!("{attr_path} › nix"));
@@ -271,17 +285,34 @@ impl NixBuilder {
         Ok(())
     }
 
-    async fn detect_systems(&self, flake_path: &str) -> Result<Vec<String>, NixError> {
+    async fn detect_output_systems(
+        &self,
+        flake_path: &str,
+        attr_path: &str,
+    ) -> Result<Vec<String>, NixError> {
         let mut root_cmd = Command::new(self.nix_binary.as_os_str());
         let cmd = root_cmd
             .arg("eval")
-            .arg([flake_path, "packages"].join("#"))
+            .arg([flake_path, attr_path].join("#"))
             .arg("--apply")
             .arg("builtins.attrNames")
             .arg("--json");
 
         let stdout = exec::run_with_output(cmd).await?;
         Ok(serde_json::from_str(&stdout)?)
+    }
+
+    async fn current_system(&self) -> Result<String, NixError> {
+        let mut root_cmd = Command::new(self.nix_binary.as_os_str());
+        let cmd = root_cmd
+            .arg("eval")
+            .arg("--impure")
+            .arg("--raw")
+            .arg("--expr")
+            .arg("builtins.currentSystem");
+
+        let stdout = exec::run_with_output(cmd).await?;
+        Ok(stdout)
     }
 }
 
@@ -313,21 +344,13 @@ impl Builder for NixBuilder {
         progress.set_name(&service_name);
         progress.info("starting builder".to_string());
 
-        let flake_path = input
-            .flake
-            .as_ref()
-            .and_then(|path| path.to_str())
-            .unwrap_or(".");
-        let systems = self.detect_systems(flake_path).await?;
-
         let mut set = JoinSet::default();
 
         self.eval(
             progress.add_child("eval"),
             &mut set,
-            &platform,
-            &systems,
-            &input.packages,
+            &input,
+            &try_system(&platform)?,
         )
         .await?;
 
