@@ -1,0 +1,248 @@
+openapi: 3.0.3
+info:
+  title: Build Events API
+  description: API for tracking build events and progress
+  version: 1.0.0
+servers:
+  - url: https://api.example.com
+    description: Production server
+
+security:
+  - bearerAuth: []
+
+paths:
+  /builds:
+    post:
+      summary: Create a new build
+      description: Creates a new build with associated tags and target information
+      operationId: createBuild
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBuildRequest'
+      responses:
+        '200':
+          description: Build created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateBuildResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /builds/{buildId}/events:
+    post:
+      summary: Create a build event
+      description: Creates an event for a specific build (progress update, artifact, or completion)
+      operationId: createEvent
+      parameters:
+        - name: buildId
+          in: path
+          required: true
+          description: UUID of the build
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEventRequest'
+      responses:
+        '200':
+          description: Event created successfully
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Build not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: API token for authentication
+
+  schemas:
+    CreateBuildRequest:
+      type: object
+      required:
+        - target
+        - tags
+      properties:
+        target:
+          type: string
+          format: url
+          description: The build target
+          example: "urn:x:y:z"
+        tags:
+          $ref: '#/components/schemas/Tags'
+
+    Tags:
+      type: object
+      required:
+        - git.rev
+        - git.refname
+      properties:
+        git.rev:
+          type: string
+          description: Git commit SHA
+          example: "abc123def456"
+        git.refname:
+          type: string
+          description: Git reference name (branch/tag)
+          example: "refs/heads/main"
+        github.repo:
+          type: string
+          description: GitHub repository name
+          example: "owner/repo"
+          nullable: true
+        github.workflow:
+          type: string
+          description: GitHub workflow name
+          example: "CI Build"
+          nullable: true
+
+    CreateBuildResponse:
+      type: object
+      required:
+        - id
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique identifier for the created build
+          example: "123e4567-e89b-12d3-a456-426614174000"
+
+    CreateEventRequest:
+      type: object
+      required:
+        - event
+      properties:
+        event:
+          $ref: '#/components/schemas/Event'
+
+    Event:
+      oneOf:
+        - $ref: '#/components/schemas/ProgressEvent'
+        - $ref: '#/components/schemas/ArtifactEvent'
+        - $ref: '#/components/schemas/CompletedEvent'
+      discriminator:
+        propertyName: kind
+
+    ProgressEvent:
+      type: object
+      required:
+        - kind
+        - phase
+        - total
+        - current
+      properties:
+        kind:
+          type: string
+          enum: [progress]
+        phase:
+          type: string
+          description: Current phase of the build
+          example: "Building"
+        total:
+          type: integer
+          format: int64
+          description: Total number of items/steps
+          example: 100
+        current:
+          type: integer
+          format: int64
+          description: Current item/step number
+          example: 42
+
+    ArtifactEvent:
+      type: object
+      required:
+        - kind
+        - uri
+      properties:
+        kind:
+          type: string
+          enum: [artifact]
+        uri:
+          type: string
+          format: uri
+          description: URI of the generated artifact
+          example: "https://registry.example.com/my-app:latest"
+
+    CompletedEvent:
+      type: object
+      required:
+        - kind
+        - elapsed
+      properties:
+        kind:
+          type: string
+          enum: [completed]
+        elapsed:
+          type: object
+          required:
+            - secs
+            - nanos
+          description: Duration of the build
+          properties:
+            secs:
+              type: integer
+              format: int64
+              description: Seconds component of duration
+              example: 120
+            nanos:
+              type: integer
+              format: int32
+              description: Nanoseconds component of duration
+              example: 500000000
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: Error message
+          example: "Build not found"

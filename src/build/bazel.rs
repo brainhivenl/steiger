@@ -4,7 +4,7 @@ use miette::Diagnostic;
 use tokio::process::Command;
 
 use crate::{
-    builder::{Builder, Context, Output},
+    build::{Builder, Context, Output},
     config::Bazel,
     exec::{self, CmdBuilder, ExitError},
     image,

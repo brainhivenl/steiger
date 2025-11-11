@@ -14,7 +14,7 @@ use tokio::{
 use which::which;
 
 use crate::{
-    builder::{Builder, Context, Output},
+    build::{Builder, Context, Output},
     config::{Nix, PlatformStrategy},
     exec::{self, ExitError},
     image, progress,

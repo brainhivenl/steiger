@@ -24,6 +24,7 @@ prodash = { version = "30.0.1", features = [
     "render-line",
     "render-line-crossterm",
 ] }
+reqwest = { version = "0.12.24", default-features = false, features = ["rustls-tls-webpki-roots"] }
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.142"
 serde_repr = "0.1.20"
@@ -39,4 +40,5 @@ tokio = { version = "1.47.1", features = [
     "fs",
     "process",
 ] }
+uuid = { version = "1.18.1", features = ["serde", "v4"] }
 which = "8.0.0"

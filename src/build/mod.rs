@@ -1,15 +1,20 @@
 use miette::Diagnostic;
 use prodash::tree::Item;
 use tokio::{task::JoinSet, time::Instant};
+use uuid::Uuid;
 
 use crate::{
-    builder::{bazel::BazelBuilder, docker::DockerBuilder, ko::KoBuilder, nix::NixBuilder},
+    build::{
+        bazel::BazelBuilder, docker::DockerBuilder, events::CreateBuildRequest, ko::KoBuilder,
+        nix::NixBuilder,
+    },
     config::{Build, Config},
     image::Image,
 };
 
 mod bazel;
 mod docker;
+mod events;
 mod ko;
 mod nix;
 
@@ -27,6 +32,9 @@ pub enum BuildError {
     #[error("nix error")]
     #[diagnostic(transparent)]
     Nix(#[from] ErrorOf<NixBuilder>),
+    #[error("build events error")]
+    #[diagnostic(transparent)]
+    Events(#[from] events::ClientError),
 }
 
 #[derive(Debug, Default)]
@@ -99,6 +107,8 @@ pub struct MetaBuild {
     bazel: Option<BazelBuilder>,
     docker: Option<DockerBuilder>,
     nix: Option<NixBuilder>,
+    build_id: Option<Uuid>,
+    events: Option<events::Client>,
 }
 
 impl MetaBuild {
@@ -109,12 +119,25 @@ impl MetaBuild {
             bazel: None,
             docker: None,
             nix: None,
+            build_id: None,
+            events: events::Client::from_env(),
         }
     }
 
     pub async fn build(mut self, mut pb: Item, platform: &str) -> Result<Output, BuildError> {
         let instant = Instant::now();
         let mut set = JoinSet::default();
+
+        if let Some(events) = self.events.as_mut() {
+            let response = events
+                .create_build(&CreateBuildRequest {
+                    target: todo!(),
+                    tags: todo!(),
+                })
+                .await?;
+
+            self.build_id = Some(response.id);
+        }
 
         pb.init(Some(self.config.build.len()), None);
         pb.info(format!("detected platform: {platform}"));

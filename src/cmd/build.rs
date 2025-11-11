@@ -6,7 +6,7 @@ use oci_client::Reference;
 use tokio::{fs, task::JoinSet};
 
 use crate::{
-    builder::{BuildError, MetaBuild},
+    build::{BuildError, MetaBuild},
     config::Config,
     git,
     image::Image,

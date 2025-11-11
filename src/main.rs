@@ -6,7 +6,7 @@ use miette::Diagnostic;
 
 use crate::config::ConfigError;
 
-mod builder;
+mod build;
 mod cmd;
 mod config;
 mod deploy;
