@@ -3,10 +3,13 @@ use std::{collections::HashMap, mem, path::Path};
 use docker_credential::CredentialRetrievalError;
 use miette::Diagnostic;
 use oci_client::Reference;
-use tokio::{fs, task::JoinSet};
+use tokio::{fs, task::JoinSet, time::Instant};
 
 use crate::{
-    build::{BuildError, MetaBuild},
+    build::{
+        BuildError, MetaBuild,
+        events::{Client as EventsClient, CreateBuildRequest, Event, Tags},
+    },
     config::Config,
     git,
     image::Image,
@@ -47,6 +50,9 @@ pub enum Error {
     #[error("failed to build")]
     #[diagnostic(transparent)]
     Build(#[from] BuildError),
+    #[error("failed to send build event")]
+    #[diagnostic(transparent)]
+    BuildEvent(#[from] crate::build::events::ClientError),
     #[error("failed to push")]
     #[diagnostic(transparent)]
     Push(#[from] PushError),
@@ -85,65 +91,94 @@ pub async fn run(
     let insecure_registries = mem::take(&mut config.insecure_registries);
 
     let (tag, default_repo) = (config.tag_format.clone(), config.default_repo.take());
+    let events = EventsClient::from_env();
     let builder = MetaBuild::new(config);
+
+    let now = Instant::now();
     let output = builder.build(root.add_child("build"), &platform).await?;
 
-    match repo.or(default_repo) {
-        Some(repo) => {
-            let mut progress = root.add_child("push");
-            progress.init(Some(output.artifacts.len()), None);
+    let mut build_id = None;
+    if let Some(ref client) = events
+        && let Ok(tags) = Tags::try_discover()
+        && let Ok(target) = std::env::var("BUILD_EVENTS_TARGET")
+    {
+        let response = client
+            .create_build(&CreateBuildRequest { target, tags })
+            .await.unwrap();
 
-            let auth = registry::load_credentials(&repo)?;
-            let registry = Registry::with_config(auth, &insecure_registries);
-            let mut artifacts = HashMap::new();
-            let mut set = JoinSet::<Result<_, PushError>>::new();
-
-            for (artifact, images) in output.artifacts {
-                let image = find_image(images, &platform)?;
-                let pb = progress.add_child(format!("{artifact} › push"));
-                let image_ref = Reference::try_from(format!("{repo}/{artifact}:{tag}"))?;
-                let output_ref = format!("{repo}/{artifact}:{tag}@{}", image.digest);
-                let mut registry = registry.clone();
-
-                set.spawn(async move {
-                    registry.push(pb, &image_ref, image).await?;
-                    Ok((artifact, output_ref))
-                });
-            }
-
-            while let Some(Ok(result)) = set.join_next().await {
-                let (artifact, output_ref) = result?;
-
-                artifacts.insert(artifact, output_ref);
-                progress.inc();
-            }
-
-            handle.shutdown_and_wait();
-
-            println!("\nPushed artifacts:");
-
-            for (artifact, image_ref) in artifacts.iter() {
-                println!("- {artifact}: {image_ref}");
-            }
-
-            if let Some(path) = output_file {
-                let output = output::Output {
-                    builds: artifacts
-                        .into_iter()
-                        .map(|(image_name, tag)| output::Build { image_name, tag })
-                        .collect(),
-                };
-
-                let data = serde_json::to_vec(&output).map_err(WriteError::Serde)?;
-                fs::write(path, data).await.map_err(WriteError::IO)?;
-            }
-
-            Ok(())
-        }
-        None => {
-            handle.shutdown_and_wait();
-            println!("no repo set, skipping push");
-            Ok(())
-        }
+        build_id = Some(response.id);
     }
+
+    let Some(repo) = repo.or(default_repo) else {
+        handle.shutdown_and_wait();
+        println!("no repo set, skipping push");
+        return Ok(());
+    };
+
+    let mut progress = root.add_child("push");
+    progress.init(Some(output.artifacts.len()), None);
+
+    let auth = registry::load_credentials(&repo)?;
+    let registry = Registry::with_config(auth, &insecure_registries);
+    let mut artifacts = HashMap::new();
+    let mut set = JoinSet::<Result<_, PushError>>::new();
+
+    for (artifact, images) in output.artifacts {
+        let image = find_image(images, &platform)?;
+        let pb = progress.add_child(format!("{artifact} › push"));
+        let image_ref = Reference::try_from(format!("{repo}/{artifact}:{tag}"))?;
+        let output_ref = format!("{repo}/{artifact}:{tag}@{}", image.digest);
+        let mut registry = registry.clone();
+
+        set.spawn(async move {
+            registry.push(pb, &image_ref, image).await?;
+            Ok((artifact, output_ref))
+        });
+    }
+
+    while let Some(Ok(result)) = set.join_next().await {
+        let (artifact, uri) = result?;
+        artifacts.insert(artifact, uri.clone());
+
+        if let Some(ref client) = events
+            && let Some(ref id) = build_id
+        {
+            client.create_event(id, &Event::Artifact { uri }).await?;
+        }
+
+        progress.inc();
+    }
+
+    let elapsed = now.elapsed();
+    progress.done(format!("build completed in {elapsed:?}"));
+
+    handle.shutdown_and_wait();
+
+    if let Some(ref client) = events
+        && let Some(ref id) = build_id
+    {
+        client
+            .create_event(id, &Event::Completed { elapsed })
+            .await?;
+    }
+
+    println!("\nPushed artifacts:");
+
+    for (artifact, image_ref) in artifacts.iter() {
+        println!("- {artifact}: {image_ref}");
+    }
+
+    if let Some(path) = output_file {
+        let output = output::Output {
+            builds: artifacts
+                .into_iter()
+                .map(|(image_name, tag)| output::Build { image_name, tag })
+                .collect(),
+        };
+
+        let data = serde_json::to_vec(&output).map_err(WriteError::Serde)?;
+        fs::write(path, data).await.map_err(WriteError::IO)?;
+    }
+
+    Ok(())
 }

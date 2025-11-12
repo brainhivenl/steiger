@@ -3188,6 +3188,7 @@ version = "0.1.0"
 dependencies = [
  "aho-corasick",
  "async-tempfile",
+ "base64 0.22.1",
  "clap",
  "docker_credential",
  "futures",

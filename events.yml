@@ -23,7 +23,7 @@ paths:
             schema:
               $ref: '#/components/schemas/CreateBuildRequest'
       responses:
-        '200':
+        '201':
           description: Build created successfully
           content:
             application/json:
@@ -68,7 +68,7 @@ paths:
             schema:
               $ref: '#/components/schemas/CreateEventRequest'
       responses:
-        '200':
+        '201':
           description: Event created successfully
         '400':
           description: Bad request

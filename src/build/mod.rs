@@ -14,7 +14,7 @@ use crate::{
 
 mod bazel;
 mod docker;
-mod events;
+pub(crate) mod events;
 mod ko;
 mod nix;
 
@@ -107,8 +107,6 @@ pub struct MetaBuild {
     bazel: Option<BazelBuilder>,
     docker: Option<DockerBuilder>,
     nix: Option<NixBuilder>,
-    build_id: Option<Uuid>,
-    events: Option<events::Client>,
 }
 
 impl MetaBuild {
@@ -119,25 +117,11 @@ impl MetaBuild {
             bazel: None,
             docker: None,
             nix: None,
-            build_id: None,
-            events: events::Client::from_env(),
         }
     }
 
     pub async fn build(mut self, mut pb: Item, platform: &str) -> Result<Output, BuildError> {
-        let instant = Instant::now();
         let mut set = JoinSet::default();
-
-        if let Some(events) = self.events.as_mut() {
-            let response = events
-                .create_build(&CreateBuildRequest {
-                    target: todo!(),
-                    tags: todo!(),
-                })
-                .await?;
-
-            self.build_id = Some(response.id);
-        }
 
         pb.init(Some(self.config.build.len()), None);
         pb.info(format!("detected platform: {platform}"));
@@ -168,10 +152,6 @@ impl MetaBuild {
             pb.inc();
             output.merge(result?);
         }
-
-        let elapsed = instant.elapsed();
-
-        pb.done(format!("build completed in {elapsed:?}"));
 
         Ok(output)
     }

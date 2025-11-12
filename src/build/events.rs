@@ -1,10 +1,21 @@
 use std::{env, sync::Arc, time::Duration};
 
+use base64::{Engine, prelude::BASE64_STANDARD};
 use reqwest::header::{HeaderMap, InvalidHeaderValue};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use uuid::Uuid;
 
-#[derive(Serialize)]
+#[derive(Debug, thiserror::Error)]
+pub enum TagDiscoveryError {
+    #[error("discovery failed: {0}")]
+    Discover(#[from] gix::discover::Error),
+    #[error("failed to find reference: {0}")]
+    FindReference(#[from] gix::reference::find::existing::Error),
+    #[error("detached head")]
+    DetachedHead,
+}
+
+#[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Tags {
     #[serde(rename = "git.rev")]
@@ -15,6 +26,31 @@ pub struct Tags {
     pub github_repo: Option<String>,
     #[serde(rename = "github.workflow")]
     pub github_workflow: Option<String>,
+}
+
+impl Tags {
+    pub fn try_discover() -> Result<Tags, TagDiscoveryError> {
+        let repo = gix::discover(".")?;
+        let head = repo.head()?;
+        let id = head.id().ok_or(TagDiscoveryError::DetachedHead)?;
+
+        let git_rev = id.to_string();
+        let git_refname = head
+            .try_into_referent()
+            .ok_or(TagDiscoveryError::DetachedHead)?
+            .name()
+            .as_bstr()
+            .to_string();
+        let github_repo = env::var("GITHUB_REPOSITORY").ok();
+        let github_workflow = env::var("GITHUB_WORKFLOW").ok();
+
+        Ok(Tags {
+            git_rev,
+            git_refname,
+            github_repo,
+            github_workflow,
+        })
+    }
 }
 
 #[derive(Serialize)]
@@ -29,34 +65,25 @@ pub struct CreateBuildResponse {
     pub id: Uuid,
 }
 
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CompletedEvent {
-    pub elapsed: Duration,
-}
-
-#[derive(Serialize)]
-pub struct ProgressEvent {
-    pub phase: String,
-    pub total: i64,
-    pub current: i64,
-}
-
-#[derive(Serialize)]
-pub struct ArtifactEvent {
-    pub uri: String,
-}
-
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
 pub enum Event {
-    Progress(ProgressEvent),
-    Artifact(ArtifactEvent),
-    Completed(CompletedEvent),
+    Progress {
+        phase: String,
+        total: i64,
+        current: i64,
+    },
+    Artifact {
+        uri: String,
+    },
+    Completed {
+        elapsed: Duration,
+    },
 }
 
 #[derive(Serialize)]
-pub struct CreateEventRequest {
-    pub event: Event,
+pub struct CreateEventRequest<'a> {
+    pub event: &'a Event,
 }
 
 #[derive(Debug, Deserialize, thiserror::Error)]
@@ -65,7 +92,7 @@ pub struct ErrorResponse {
     pub error: String,
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, miette::Diagnostic, thiserror::Error)]
 pub enum ClientError {
     #[error("API error: {0}")]
     Response(#[from] ErrorResponse),
@@ -86,7 +113,10 @@ pub struct Client {
 impl Client {
     pub fn new(base_url: String, api_token: &str) -> Result<Self, ClientError> {
         let mut headers = HeaderMap::new();
-        headers.insert("authorization", format!("Bearer {api_token}").parse()?);
+        headers.insert(
+            "authorization",
+            format!("Basic {}", BASE64_STANDARD.encode(api_token)).parse()?,
+        );
 
         Ok(Self {
             base_url: Arc::new(base_url),
@@ -106,7 +136,7 @@ impl Client {
         }
     }
 
-    async fn post<I, O>(&mut self, url: &str, body: I) -> Result<O, ClientError>
+    async fn post<I, O>(&self, url: &str, body: I) -> Result<O, ClientError>
     where
         I: Serialize,
         O: DeserializeOwned,
@@ -121,21 +151,17 @@ impl Client {
     }
 
     pub async fn create_build(
-        &mut self,
+        &self,
         request: &CreateBuildRequest,
     ) -> Result<CreateBuildResponse, ClientError> {
         self.post(&format!("{}/builds", self.base_url), request)
             .await
     }
 
-    pub async fn create_event(
-        &mut self,
-        build_id: Uuid,
-        request: &CreateEventRequest,
-    ) -> Result<(), ClientError> {
+    pub async fn create_event(&self, build_id: &Uuid, event: &Event) -> Result<(), ClientError> {
         self.post(
             &format!("{}/builds/{build_id}/events", self.base_url),
-            request,
+            CreateEventRequest { event },
         )
         .await
     }

@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 aho-corasick = "1.1.3"
 async-tempfile = "0.7.0"
+base64 = "0.22.1"
 clap = { version = "4.5.45", features = ["derive"] }
 docker_credential = "1.3.2"
 futures = "0.3.31"
