@@ -66,6 +66,7 @@
       in {
         default = craneLib.devShell {
           packages = [
+            pkgs.rust-analyzer
             pkgs.nix-eval-jobs
           ];
         };

@@ -1,15 +1,20 @@
 use miette::Diagnostic;
 use prodash::tree::Item;
 use tokio::{task::JoinSet, time::Instant};
+use uuid::Uuid;
 
 use crate::{
-    builder::{bazel::BazelBuilder, docker::DockerBuilder, ko::KoBuilder, nix::NixBuilder},
+    build::{
+        bazel::BazelBuilder, docker::DockerBuilder, events::CreateBuildRequest, ko::KoBuilder,
+        nix::NixBuilder,
+    },
     config::{Build, Config},
     image::Image,
 };
 
 mod bazel;
 mod docker;
+pub(crate) mod events;
 mod ko;
 mod nix;
 
@@ -27,6 +32,9 @@ pub enum BuildError {
     #[error("nix error")]
     #[diagnostic(transparent)]
     Nix(#[from] ErrorOf<NixBuilder>),
+    #[error("build events error")]
+    #[diagnostic(transparent)]
+    Events(#[from] events::ClientError),
 }
 
 #[derive(Debug, Default)]
@@ -113,7 +121,6 @@ impl MetaBuild {
     }
 
     pub async fn build(mut self, mut pb: Item, platform: &str) -> Result<Output, BuildError> {
-        let instant = Instant::now();
         let mut set = JoinSet::default();
 
         pb.init(Some(self.config.build.len()), None);
@@ -145,10 +152,6 @@ impl MetaBuild {
             pb.inc();
             output.merge(result?);
         }
-
-        let elapsed = instant.elapsed();
-
-        pb.done(format!("build completed in {elapsed:?}"));
 
         Ok(output)
     }

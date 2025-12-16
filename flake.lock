@@ -33,11 +33,11 @@
     },
     "nixpkgs-ocitools": {
       "locked": {
-        "lastModified": 1749738911,
-        "narHash": "sha256-XKXtCm32NTGJ4AZRcX9hz8tjcF5bwGiK/9Z3C3OEANs=",
+        "lastModified": 1762676340,
+        "narHash": "sha256-xgCbeNYgpXxFqGXqIRt5e5l9DZMYm8MytdAx9otaBmI=",
         "owner": "msanft",
         "repo": "nixpkgs",
-        "rev": "3a858b3070e928d6eb79e0fcf21d0c16337edbb5",
+        "rev": "69308a87138ab50f174136440f63d80f086f8bc4",
         "type": "github"
       },
       "original": {
