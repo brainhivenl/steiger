@@ -40,7 +40,8 @@ jobs:
       - name: Install prerequisites
         if: ${{ matrix.os.name == 'linux' }}
         run: |
-          sudo apt-get install -y gcc-aarch64-linux-gnu musl-tools
+          sudo apt-get update && \
+            sudo apt-get install -y gcc-aarch64-linux-gnu musl-tools
       - run: |
           echo "RUST_TARGET=${{ matrix.arch }}-${{ matrix.os.vendor }}-${{ matrix.os.name }}${{ matrix.libc && '-' }}${{ matrix.libc }}" >> $GITHUB_ENV
       - uses: dtolnay/rust-toolchain@stable
