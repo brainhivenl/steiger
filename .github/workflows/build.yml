@@ -15,7 +15,7 @@ jobs:
         os:
           - name: darwin
             vendor: apple
-            runner: macos-13
+            runner: macos-14
           - name: linux
             vendor: unknown
             runner: ubuntu-22.04
