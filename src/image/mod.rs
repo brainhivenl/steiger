@@ -77,7 +77,7 @@ pub async fn load_from_path(dir: impl AsRef<Path>) -> Result<Vec<Image>, ImageEr
         let digest = compute_digest(&manifest)?;
         let data = store.read_blob(&manifest.config.digest).await?;
         let config = Config {
-            data,
+            data: data.into(),
             media_type: manifest.config.media_type.clone(),
             annotations: manifest.config.annotations.clone(),
         };

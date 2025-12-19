@@ -1,11 +1,10 @@
 use miette::Diagnostic;
 use prodash::tree::Item;
-use tokio::{task::JoinSet, time::Instant};
-use uuid::Uuid;
+use tokio::task::JoinSet;
 
 use crate::{
     build::{
-        bazel::BazelBuilder, docker::DockerBuilder, events::CreateBuildRequest, ko::KoBuilder,
+        bazel::BazelBuilder, docker::DockerBuilder, ko::KoBuilder,
         nix::NixBuilder,
     },
     config::{Build, Config},

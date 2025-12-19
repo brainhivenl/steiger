@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use docker_credential::{CredentialRetrievalError, DockerCredential};
 use futures::{StreamExt, TryStreamExt, future, stream};
 use miette::Diagnostic;
@@ -93,31 +95,39 @@ impl Registry {
         progress.info("pushing image");
 
         // Push blobs with cache
-        stream::iter(&image.layers)
+        stream::iter(image.layers)
             .map(|layer| {
                 let client = self.client.clone();
-                let layer_desc = &image.manifest.layers;
                 let progress = &progress;
 
                 async move {
                     let digest = layer.sha256_digest();
-                    let desc = layer_desc.iter().find(|l| l.digest == digest).unwrap();
 
-                    match client
-                        .pull_blob_stream_partial(image_ref, desc, 0, Some(1))
-                        .await
-                    {
-                        Ok(_) => {
-                            progress.inc();
-                            Ok(())
+                    if !client.blob_exists(image_ref, &digest).await? {
+                        for i in 1..5 {
+                            match client
+                                .push_blob(image_ref, layer.data.clone(), &digest)
+                                .await
+                            {
+                                Ok(_) => break,
+                                // Retry on digest mismatch (400) and invalid range (416) errors.
+                                // Root cause unknown; we should probably look into this but retry is safe for now.
+                                // Retrying on 5xx server errors is also acceptable.
+                                Err(OciDistributionError::ServerError {
+                                    code: 400 | 416 | 500..599,
+                                    ..
+                                }) => {
+                                    tokio::time::sleep(Duration::from_secs(i * 2)).await;
+                                    continue;
+                                }
+                                Err(e) => return Err(e),
+                            }
                         }
-                        Err(OciDistributionError::ServerError { code: 404, .. }) => {
-                            client.push_blob(image_ref, &layer.data, &digest).await?;
-                            progress.inc();
-                            Ok(())
-                        }
-                        Err(e) => Err(e),
                     }
+
+                    progress.inc();
+
+                    Ok(())
                 }
             })
             .boxed() // Workaround to rustc issue https://github.com/rust-lang/rust/issues/104382
@@ -127,7 +137,7 @@ impl Registry {
 
         let config_url = self
             .client
-            .push_blob(image_ref, &image.config.data, &image.manifest.config.digest)
+            .push_blob(image_ref, image.config.data, &image.manifest.config.digest)
             .await?;
         let manifest_url = self
             .client

@@ -66,13 +66,12 @@ pub async fn state() -> Result<State, GitError> {
         ..State::default()
     };
 
-    if let Some(ref_name) = head.referent_name() {
-        if let Some((Category::Tag, name)) = ref_name.category_and_short_name() {
+    if let Some(ref_name) = head.referent_name()
+        && let Some((Category::Tag, name)) = ref_name.category_and_short_name() {
             state.tag = Some(name.to_string());
         }
-    }
 
-    if let Ok(commit) = head.peel_to_commit_in_place() {
+    if let Ok(commit) = head.peel_to_commit() {
         state.commit = Some(commit.id.to_hex().to_string());
     }
 
