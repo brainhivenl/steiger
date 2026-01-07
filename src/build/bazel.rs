@@ -134,7 +134,7 @@ impl Builder for BazelBuilder {
             let artifact = input
                 .targets
                 .iter()
-                .find(|(_, t)| t == &&target)
+                .find(|(_, t)| t == &&format!("//{}", &target))
                 .map(|(artifact, _)| artifact.clone())
                 .ok_or(BazelError::MissingArtifact(target))?;
 
