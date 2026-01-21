@@ -1,8 +1,12 @@
-use std::{collections::HashMap, path::PathBuf, process::ExitStatus, sync::Arc};
+use std::{
+    collections::HashMap,
+    path::PathBuf,
+    process::ExitStatus,
+    sync::{Arc, LazyLock},
+};
 
 use aho_corasick::AhoCorasick;
 use miette::Diagnostic;
-use once_cell::sync::Lazy;
 use prodash::{Progress, tree::Item};
 use serde::Deserialize;
 use serde_repr::Deserialize_repr;
@@ -51,8 +55,8 @@ pub enum NixError {
 
 type OutPaths = HashMap<String, PathBuf>;
 
-static ANSI_REPLACER: Lazy<AhoCorasick> =
-    Lazy::new(|| AhoCorasick::new([r"\u001b", r"\033", r"\x1b", r"\e"]).unwrap());
+static ANSI_REPLACER: LazyLock<AhoCorasick> =
+    LazyLock::new(|| AhoCorasick::new([r"\u001b", r"\033", r"\x1b", r"\e"]).unwrap());
 
 fn unescape_ansi(text: &str) -> String {
     ANSI_REPLACER.replace_all(text, &["\x1b"; 4])

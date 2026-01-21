@@ -20,7 +20,6 @@ oci-client = { git = "https://github.com/oras-project/rust-oci-client", rev = "9
   "rustls-tls"
 ] }
 olpc-cjson = "0.1.4"
-once_cell = "1.21.3"
 prodash = { version = "30.0.1", features = [
   "render-line",
   "render-line-crossterm",
