@@ -38,9 +38,7 @@
         commonArgs = {
           src = craneLib.cleanCargoSource ./.;
           strictDeps = true;
-          buildInputs =
-            [pkgs.nix pkgs.nix-eval-jobs]
-            ++ lib.optionals pkgs.stdenv.isDarwin [pkgs.libiconv];
+          buildInputs = lib.optionals pkgs.stdenv.isDarwin [pkgs.libiconv];
         };
       in {
         default = craneLib.buildPackage (
@@ -48,6 +46,8 @@
           // {
             cargoArtifacts = craneLib.buildDepsOnly commonArgs;
             meta.mainProgram = "steiger";
+
+            propagatedBuildInputs = [pkgs.nix pkgs.nix-eval-jobs];
 
             NIX_BINARY = lib.getExe pkgs.nix;
             NIX_EVAL_JOBS_BINARY = lib.getExe pkgs.nix-eval-jobs;
