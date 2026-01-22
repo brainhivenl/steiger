@@ -3222,7 +3222,6 @@ dependencies = [
  "miette",
  "oci-client",
  "olpc-cjson",
- "once_cell",
  "prodash",
  "reqwest",
  "serde",
