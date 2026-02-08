@@ -98,16 +98,15 @@
         "rust-overlay": "rust-overlay"
       },
       "locked": {
-        "lastModified": 1770569455,
-        "narHash": "sha256-y+fcJrIodgW2j56Nxu1W936ZWoLnC66oCHSUIq4QLXw=",
+        "lastModified": 1770570147,
+        "narHash": "sha256-mOajpoPnvETUCAvr84Zd9Q3g+3/wQJY0/qqCAPezSoU=",
         "owner": "brainhivenl",
         "repo": "steiger",
-        "rev": "18b2b31ca45e14f744358e27c1873872c8d26cfd",
+        "rev": "54cddf57c949291422862eb4dda6a6035cab692f",
         "type": "github"
       },
       "original": {
         "owner": "brainhivenl",
-        "ref": "fix/ocitools-fork",
         "repo": "steiger",
         "type": "github"
       }
