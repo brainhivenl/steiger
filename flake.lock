@@ -33,16 +33,16 @@
     },
     "nixpkgs-ocitools": {
       "locked": {
-        "lastModified": 1762676340,
-        "narHash": "sha256-xgCbeNYgpXxFqGXqIRt5e5l9DZMYm8MytdAx9otaBmI=",
-        "owner": "msanft",
+        "lastModified": 1770565630,
+        "narHash": "sha256-+0dj3MSv+Pxf6e+89tObqGSAGWcmZHPFGw8Hi6DsTco=",
+        "owner": "brainhivenl",
         "repo": "nixpkgs",
-        "rev": "69308a87138ab50f174136440f63d80f086f8bc4",
+        "rev": "6144e69fa0fd51c96201bc64632526dee386ddf4",
         "type": "github"
       },
       "original": {
-        "owner": "msanft",
-        "ref": "msanft/oci/refactor",
+        "owner": "brainhivenl",
+        "ref": "oci/refactor",
         "repo": "nixpkgs",
         "type": "github"
       }

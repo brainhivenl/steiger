@@ -1,7 +1,7 @@
 {
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
-    nixpkgs-ocitools.url = "github:msanft/nixpkgs/msanft/oci/refactor";
+    nixpkgs-ocitools.url = "github:brainhivenl/nixpkgs/oci/refactor";
 
     crane.url = "github:ipetkov/crane";
     rust-overlay = {
