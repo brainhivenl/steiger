@@ -1,7 +1,7 @@
 {
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
-    steiger.url = "github:brainhivenl/steiger";
+    steiger.url = "github:brainhivenl/steiger/fix/ocitools-fork";
   };
 
   outputs = {
