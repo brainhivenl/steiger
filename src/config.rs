@@ -69,6 +69,8 @@ pub struct Nix {
     pub flake: PathBuf,
     #[serde(default)]
     pub platform_strategy: PlatformStrategy,
+    #[serde(default)]
+    pub extra_args: Vec<String>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
