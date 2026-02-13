@@ -4,8 +4,6 @@ use async_tempfile::TempFile;
 use clap::Parser;
 use miette::Diagnostic;
 
-use crate::config::ConfigError;
-
 mod build;
 mod cmd;
 mod config;
@@ -104,7 +102,10 @@ enum AppError {
     IO(#[from] std::io::Error),
     #[error("failed to read config")]
     #[diagnostic(transparent)]
-    Config(#[from] ConfigError),
+    Config(#[from] config::Error),
+    #[error(transparent)]
+    #[diagnostic(transparent)]
+    LocateConfig(#[from] config::LocateError),
     #[error(transparent)]
     #[diagnostic(transparent)]
     Build(Box<cmd::build::Error>),
@@ -127,12 +128,12 @@ impl From<cmd::build::Error> for AppError {
 }
 
 async fn run(opts: Opts) -> Result<(), AppError> {
-    if let Some(dir) = opts.dir {
-        env::set_current_dir(&dir).map_err(AppError::SetCurrentDir)?;
-    }
-
-    let config_path = opts.config.unwrap_or_else(|| "steiger.yml".into());
+    let config_path = config::locate(opts.dir.as_ref(), opts.config.as_ref())?;
     let detected_platform = detect_platform().await;
+
+    if let Some(ref dir) = opts.dir {
+        env::set_current_dir(dir).map_err(AppError::SetCurrentDir)?;
+    }
 
     match opts.cmd {
         Cmd::Build {

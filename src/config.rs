@@ -106,7 +106,7 @@ pub struct Profile {
 }
 
 #[derive(Debug, Diagnostic, thiserror::Error)]
-pub enum ConfigError {
+pub enum Error {
     #[error("I/O error")]
     IO(#[from] std::io::Error),
     #[error("substitution failed")]
@@ -159,10 +159,45 @@ fn extract_git_vars(state: git::State) -> HashMap<String, String> {
     vars
 }
 
+#[derive(Debug, Diagnostic, thiserror::Error)]
+pub enum LocateError {
+    #[error("I/O error")]
+    IO(#[from] std::io::Error),
+    #[error("{path} does not exist")]
+    DoesNotExist { path: PathBuf },
+    #[error("config file not found")]
+    #[diagnostic(help("make sure you're in the right directory or create a new `steiger.yml`"))]
+    NotFound,
+}
+
+pub fn locate(dir: Option<&PathBuf>, config: Option<&PathBuf>) -> Result<PathBuf, LocateError> {
+    let base = dir
+        .map(|path| path.as_ref())
+        .unwrap_or_else(|| Path::new("."));
+
+    if let Some(config) = config {
+        let path = base.join(config);
+        if path.try_exists()? {
+            return Ok(std::path::absolute(path)?);
+        } else {
+            return Err(LocateError::DoesNotExist { path });
+        }
+    }
+
+    for file_name in ["steiger.yml", "steiger.yaml"] {
+        let path = base.join(file_name);
+        if path.try_exists()? {
+            return Ok(std::path::absolute(path)?);
+        }
+    }
+
+    Err(LocateError::NotFound)
+}
+
 pub async fn load_from_path(
     profile: Option<&str>,
     path: impl AsRef<Path>,
-) -> Result<Config, ConfigError> {
+) -> Result<Config, Error> {
     let mut vars = extract_git_vars(git::state().await?);
     let data = tokio::fs::read(path).await?;
     let mut config = serde_yml::from_slice::<Value>(&data)?;
@@ -172,7 +207,7 @@ pub async fn load_from_path(
             config
                 .get_mut("profiles")
                 .and_then(|profiles| profiles.get_mut(profile))
-                .ok_or_else(|| ConfigError::Profile(profile.to_string()))?,
+                .ok_or_else(|| Error::Profile(profile.to_string()))?,
         ))?;
 
         vars.extend(profile.vars);
