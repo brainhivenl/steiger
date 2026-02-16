@@ -1,0 +1,48 @@
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+name: populate cache
+permissions:
+  packages: write
+jobs:
+  populate-cache:
+    name: Populate cache
+    runs-on: ${{ matrix.os.runner }}
+    strategy:
+      matrix:
+        os:
+          - name: darwin
+            vendor: apple
+            runner: macos-13
+          - name: linux
+            vendor: unknown
+            runner: ubuntu-22.04
+        arch: [x86_64, aarch64]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: cachix/install-nix-action@v30
+      - name: Set up magic Nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@v2
+
+      - name: Set up Nix cache
+        env:
+          ATTIC_TOKEN: ${{ secrets.ATTIC_TOKEN }}
+          ATTIC_URL: ${{ secrets.ATTIC_URL }}
+          ATTIC_CACHE: ${{ secrets.ATTIC_CACHE }}
+        run: |
+          nix profile install nixpkgs#attic-client
+          attic login brainhive "$ATTIC_URL" "$ATTIC_TOKEN"
+          attic use "brainhive:$ATTIC_CACHE"
+
+      - name: Build client
+        env:
+          ATTIC_CACHE: ${{ secrets.ATTIC_CACHE }}
+        run: |
+          nix profile install nixpkgs#nix-fast-build
+          nix-fast-build \
+            --no-nom \
+            --out-link result \
+            --flake .#packages \
+            --attic-cache "$brainhive:ATTIC_CACHE"
