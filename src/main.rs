@@ -3,13 +3,12 @@ use std::{env, error::Error, path::PathBuf};
 use async_tempfile::TempFile;
 use clap::Parser;
 use miette::Diagnostic;
+use steiger::config;
 
 mod build;
 mod cmd;
-mod config;
 mod deploy;
 mod exec;
-mod git;
 mod image;
 mod progress;
 mod registry;

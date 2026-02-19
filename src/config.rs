@@ -13,6 +13,7 @@ use crate::git;
 const DEFAULT_TAG_FORMAT: &str = "${gitTag:${gitShortCommit:unknown}}${gitDirty:}";
 
 #[derive(Debug, Deserialize, Clone)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct Config {
     pub build: HashMap<String, Build>,
@@ -26,6 +27,7 @@ pub struct Config {
 }
 
 #[derive(Clone, Debug, Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct Bazel {
     pub targets: HashMap<String, String>,
@@ -33,6 +35,7 @@ pub struct Bazel {
 }
 
 #[derive(Clone, Debug, Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct Docker {
     pub context: String,
@@ -44,12 +47,14 @@ pub struct Docker {
 }
 
 #[derive(Clone, Debug, Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct Ko {
     pub import_path: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Default)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub enum PlatformStrategy {
     #[default]
@@ -62,6 +67,7 @@ fn default_flake_path() -> PathBuf {
 }
 
 #[derive(Clone, Debug, Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct Nix {
     pub packages: HashMap<String, String>,
@@ -74,6 +80,7 @@ pub struct Nix {
 }
 
 #[derive(Debug, Deserialize, Clone)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum Build {
     Ko(Ko),
@@ -83,6 +90,7 @@ pub enum Build {
 }
 
 #[derive(Clone, Debug, Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct Helm {
     pub path: String,
@@ -95,12 +103,14 @@ pub struct Helm {
 }
 
 #[derive(Debug, Deserialize, Clone)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum Release {
     Helm(Helm),
 }
 
 #[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct Profile {
     #[serde(default, flatten)]

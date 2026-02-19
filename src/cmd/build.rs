@@ -4,6 +4,7 @@ use docker_credential::CredentialRetrievalError;
 use miette::Diagnostic;
 use oci_client::Reference;
 use tokio::{fs, task::JoinSet, time::Instant};
+use steiger::git;
 
 use crate::{
     build::{
@@ -11,7 +12,6 @@ use crate::{
         events::{Client as EventsClient, CreateBuildRequest, Event, Tags},
     },
     config::Config,
-    git,
     image::Image,
     progress,
     registry::{self, PushError, Registry},
