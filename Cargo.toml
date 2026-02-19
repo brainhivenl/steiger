@@ -21,7 +21,7 @@ futures = "0.3.31"
 gix = { version = "0.75.0", default-features = false, features = ["status"] }
 heck = "0.5.0"
 hex = "0.4.3"
-k8s-openapi = { version = "0.25.0", features = ["v1_30"] }
+k8s-openapi = { version = "0.25.0", features = ["v1_32"] }
 kube = "1.1.0"
 miette = { version = "7.6.0", features = ["fancy"] }
 oci-client = { git = "https://github.com/oras-project/rust-oci-client", rev = "95a20eb0cb7a05167b1507b51c5a6800d3bab6f9", version = "0.15.0", default-features = false, features = [
