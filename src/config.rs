@@ -5,14 +5,15 @@ use std::{
 };
 
 use miette::Diagnostic;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_yml::{Mapping, Value};
 
 use crate::git;
 
 const DEFAULT_TAG_FORMAT: &str = "${gitTag:${gitShortCommit:unknown}}${gitDirty:}";
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct Config {
     pub build: HashMap<String, Build>,
@@ -25,14 +26,16 @@ pub struct Config {
     pub tag_format: String,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct Bazel {
     pub targets: HashMap<String, String>,
     pub platforms: HashMap<String, String>,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct Docker {
     pub context: String,
@@ -43,13 +46,15 @@ pub struct Docker {
     pub hosts: HashMap<String, String>,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct Ko {
     pub import_path: Option<String>,
 }
 
-#[derive(Clone, Debug, Deserialize, Default)]
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub enum PlatformStrategy {
     #[default]
@@ -61,7 +66,8 @@ fn default_flake_path() -> PathBuf {
     PathBuf::from(".")
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct Nix {
     pub packages: HashMap<String, String>,
@@ -69,9 +75,12 @@ pub struct Nix {
     pub flake: PathBuf,
     #[serde(default)]
     pub platform_strategy: PlatformStrategy,
+    #[serde(default)]
+    pub extra_args: Vec<String>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum Build {
     Ko(Ko),
@@ -80,7 +89,8 @@ pub enum Build {
     Nix(Nix),
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct Helm {
     pub path: String,
@@ -92,13 +102,15 @@ pub struct Helm {
     pub values_files: Vec<String>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum Release {
     Helm(Helm),
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct Profile {
     #[serde(default, flatten)]
@@ -106,7 +118,7 @@ pub struct Profile {
 }
 
 #[derive(Debug, Diagnostic, thiserror::Error)]
-pub enum ConfigError {
+pub enum Error {
     #[error("I/O error")]
     IO(#[from] std::io::Error),
     #[error("substitution failed")]
@@ -159,10 +171,45 @@ fn extract_git_vars(state: git::State) -> HashMap<String, String> {
     vars
 }
 
+#[derive(Debug, Diagnostic, thiserror::Error)]
+pub enum LocateError {
+    #[error("I/O error")]
+    IO(#[from] std::io::Error),
+    #[error("{path} does not exist")]
+    DoesNotExist { path: PathBuf },
+    #[error("config file not found")]
+    #[diagnostic(help("make sure you're in the right directory or create a new `steiger.yml`"))]
+    NotFound,
+}
+
+pub fn locate(dir: Option<&PathBuf>, config: Option<&PathBuf>) -> Result<PathBuf, LocateError> {
+    let base = dir
+        .map(|path| path.as_ref())
+        .unwrap_or_else(|| Path::new("."));
+
+    if let Some(config) = config {
+        let path = base.join(config);
+        if path.try_exists()? {
+            return Ok(std::path::absolute(path)?);
+        } else {
+            return Err(LocateError::DoesNotExist { path });
+        }
+    }
+
+    for file_name in ["steiger.yml", "steiger.yaml"] {
+        let path = base.join(file_name);
+        if path.try_exists()? {
+            return Ok(std::path::absolute(path)?);
+        }
+    }
+
+    Err(LocateError::NotFound)
+}
+
 pub async fn load_from_path(
     profile: Option<&str>,
     path: impl AsRef<Path>,
-) -> Result<Config, ConfigError> {
+) -> Result<Config, Error> {
     let mut vars = extract_git_vars(git::state().await?);
     let data = tokio::fs::read(path).await?;
     let mut config = serde_yml::from_slice::<Value>(&data)?;
@@ -172,7 +219,7 @@ pub async fn load_from_path(
             config
                 .get_mut("profiles")
                 .and_then(|profiles| profiles.get_mut(profile))
-                .ok_or_else(|| ConfigError::Profile(profile.to_string()))?,
+                .ok_or_else(|| Error::Profile(profile.to_string()))?,
         ))?;
 
         vars.extend(profile.vars);

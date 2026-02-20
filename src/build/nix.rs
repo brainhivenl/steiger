@@ -168,6 +168,7 @@ impl EvalResult {
     async fn build(
         mut self,
         nix_binary: Arc<PathBuf>,
+        extra_args: Arc<[String]>,
         mut progress: Item,
     ) -> Result<OutPaths, NixError> {
         if let Some(error) = self.error.take() {
@@ -186,6 +187,7 @@ impl EvalResult {
             let mut root_cmd = Command::new(nix_binary.as_ref());
             let cmd = root_cmd
                 .arg("build")
+                .args(extra_args.iter())
                 .arg("--no-link")
                 .arg("--log-format")
                 .arg("internal-json")
@@ -240,6 +242,7 @@ impl NixBuilder {
         system: &str,
     ) -> Result<(), NixError> {
         let flake_path = input.flake.to_string_lossy();
+        let extra_args = Arc::<[String]>::from(input.extra_args.clone());
         let attr_path = match input.platform_strategy {
             PlatformStrategy::Native => IMAGE_OUTPUTS_PATH.to_string(),
             PlatformStrategy::CrossSystem => {
@@ -281,8 +284,9 @@ impl NixBuilder {
             if input.packages.values().any(|v| v == &attr_path) {
                 progress.init(Some(set.len() + 1), None);
                 let binary = Arc::clone(&self.nix_binary);
+                let extra_args = Arc::clone(&extra_args);
                 let progress = progress.add_child(format!("{attr_path} › nix"));
-                set.spawn(drv.build(binary, progress));
+                set.spawn(drv.build(binary, extra_args, progress));
             }
         }
 
