@@ -138,6 +138,10 @@ impl Builder for DockerBuilder {
         let build_args = fmt_map(input.build_args, '=');
         let hosts = fmt_map(input.hosts, ':');
 
+        if let Some(target) = input.target {
+            cmd.flag("--target", target);
+        }
+
         for entry in build_args.iter() {
             cmd.flag("--build-arg", entry);
         }
