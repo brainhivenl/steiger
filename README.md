@@ -278,6 +278,7 @@ build:
   frontend:
     type: docker
     context: ./frontend
+    target: web # optional
     dockerfile: Dockerfile.prod # optional, defaults to Dockerfile
     buildArgs:
       ENV: ${env} # variable substitution is supported

@@ -44,6 +44,8 @@ pub struct Docker {
     pub build_args: HashMap<String, String>,
     #[serde(default)]
     pub hosts: HashMap<String, String>,
+    #[serde(default)]
+    pub target: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
