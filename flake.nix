@@ -1,8 +1,7 @@
 {
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
-    nixpkgs-ocitools.url = "github:brainhivenl/nixpkgs/oci/refactor";
-
+    nix-filter.url = "github:numtide/nix-filter";
     crane.url = "github:ipetkov/crane";
     rust-overlay = {
       url = "github:oxalica/rust-overlay";
@@ -12,11 +11,13 @@
 
   outputs = {
     self,
+    nix-filter,
     nixpkgs,
     crane,
     ...
-  } @ inputs: let
+  }: let
     inherit (nixpkgs) lib;
+    filter = nix-filter.lib;
 
     forEachSystem = fun:
       lib.genAttrs (lib.systems.flakeExposed) (
@@ -35,13 +36,21 @@
     packages = forEachSystem (
       pkgs: let
         craneLib = crane.mkLib pkgs;
+        src = filter {
+          root = ./.;
+          include = [
+            ./Cargo.toml
+            ./Cargo.lock
+            ./src
+          ];
+        };
         commonArgs = {
-          src = craneLib.cleanCargoSource ./.;
+          inherit src;
           strictDeps = true;
           buildInputs = lib.optionals pkgs.stdenv.isDarwin [pkgs.libiconv];
         };
-      in {
-        default = craneLib.buildPackage (
+
+        steiger = craneLib.buildPackage (
           commonArgs
           // {
             cargoArtifacts = craneLib.buildDepsOnly commonArgs;
@@ -53,30 +62,38 @@
             NIX_EVAL_JOBS_BINARY = lib.getExe pkgs.nix-eval-jobs;
           }
         );
+      in {
+        default = steiger;
+        ociTools = pkgs.callPackage ./oci-tools {};
       }
     );
 
     checks = forEachSystem (pkgs: {
-      inherit (self.packages.${pkgs.system}) default;
+      inherit (self.packages.${pkgs.stdenv.hostPlatform.system}) default;
     });
 
     devShells = forEachSystem (
-      pkgs: let
-        craneLib = crane.mkLib pkgs;
-      in {
-        default = craneLib.devShell {
+      pkgs: {
+        default = (crane.mkLib pkgs).devShell {
           packages = [
             pkgs.rust-analyzer
             pkgs.nix-eval-jobs
           ];
         };
+        steiger = pkgs.mkShell {
+          packages = [self.packages.${pkgs.stdenv.hostPlatform.system}.default];
+        };
       }
     );
 
-    overlays.ociTools = final: prev: let
-      pkgs = import inputs.nixpkgs-ocitools {inherit (final) system;};
-    in {
-      inherit (pkgs) ociTools;
+    overlays = {
+      default = final: prev: {
+        steiger = self.packages.${final.stdenv.hostPlatform.system}.default;
+        ociTools = self.packages.${final.stdenv.hostPlatform.system}.ociTools;
+      };
+      ociTools = final: prev: {
+        ociTools = self.packages.${final.stdenv.hostPlatform.system}.ociTools;
+      };
     };
   };
 }
