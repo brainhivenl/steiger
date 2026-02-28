@@ -3,6 +3,7 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     nixpkgs-ocitools.url = "github:brainhivenl/nixpkgs/oci/refactor";
 
+    systems.url = "github:nix-systems/default";
     crane.url = "github:ipetkov/crane";
     rust-overlay = {
       url = "github:oxalica/rust-overlay";
@@ -13,13 +14,14 @@
   outputs = {
     self,
     nixpkgs,
+    systems,
     crane,
     ...
   } @ inputs: let
     inherit (nixpkgs) lib;
 
     forEachSystem = fun:
-      lib.genAttrs (lib.systems.flakeExposed) (
+      lib.genAttrs (import systems) (
         system: fun (import nixpkgs {inherit system;})
       );
   in {
