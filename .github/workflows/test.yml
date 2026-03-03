@@ -26,6 +26,14 @@ jobs:
       - name: Install Nix prerequisites
         if: ${{ matrix.test == 'nix' }}
         run: nix-env -i nix-eval-jobs -f '<nixpkgs>'
+      # - name: Setup Nix cache
+      #   if: ${{ matrix.test == 'nix' }}
+      #   uses: ryanccn/attic-action@v0
+      #   with:
+      #     endpoint: https://attic.brainhive.nl/
+      #     cache: steiger
+      #     token: ${{ secrets.ATTIC_TOKEN }}
+      #     inputs-from: .
       - name: Install Bazel prerequisites
         if: ${{ matrix.test == 'bazel' }}
         run: |

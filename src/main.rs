@@ -5,6 +5,8 @@ use clap::Parser;
 use miette::Diagnostic;
 use steiger::config;
 
+use crate::cmd::nix2oci;
+
 mod build;
 mod cmd;
 mod deploy;
@@ -71,6 +73,8 @@ enum Cmd {
         #[arg(short, long)]
         profile: Option<String>,
     },
+
+    NixToOci(nix2oci::Opts),
 }
 
 async fn detect_kube_platform() -> Result<String, Box<dyn Error>> {
@@ -111,6 +115,9 @@ enum AppError {
     #[error(transparent)]
     #[diagnostic(transparent)]
     Deploy(#[from] cmd::deploy::Error),
+    #[error(transparent)]
+    #[diagnostic(transparent)]
+    NixToOci(#[from] cmd::nix2oci::Error),
     #[error("failed to set current dir")]
     SetCurrentDir(std::io::Error),
     #[error("failed to create temp file")]
@@ -127,7 +134,7 @@ impl From<cmd::build::Error> for AppError {
 }
 
 async fn run(opts: Opts) -> Result<(), AppError> {
-    let config_path = config::locate(opts.dir.as_ref(), opts.config.as_ref())?;
+    let config_path = config::locate(opts.dir.as_ref(), opts.config.as_ref());
     let detected_platform = detect_platform().await;
 
     if let Some(ref dir) = opts.dir {
@@ -141,7 +148,7 @@ async fn run(opts: Opts) -> Result<(), AppError> {
             output_file,
             platform,
         } => {
-            let config = config::load_from_path(profile.as_deref(), config_path).await?;
+            let config = config::load_from_path(profile.as_deref(), config_path?).await?;
 
             cmd::build::run(
                 config,
@@ -155,7 +162,7 @@ async fn run(opts: Opts) -> Result<(), AppError> {
             profile,
             input_file,
         } => {
-            let config = config::load_from_path(profile.as_deref(), config_path).await?;
+            let config = config::load_from_path(profile.as_deref(), config_path?).await?;
             cmd::deploy::run(config, &input_file).await?;
         }
         Cmd::Run {
@@ -164,7 +171,7 @@ async fn run(opts: Opts) -> Result<(), AppError> {
             platform,
         } => {
             let dest = TempFile::new().await?;
-            let config = config::load_from_path(profile.as_deref(), config_path).await?;
+            let config = config::load_from_path(profile.as_deref(), config_path?).await?;
 
             if repo.is_none() && config.default_repo.is_none() {
                 return Err(AppError::RepoRequired);
@@ -182,6 +189,8 @@ async fn run(opts: Opts) -> Result<(), AppError> {
 
             cmd::deploy::run(config, dest.file_path()).await?;
         }
+
+        Cmd::NixToOci(opts) => nix2oci::run(opts).unwrap(),
     }
 
     Ok(())
