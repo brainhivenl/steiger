@@ -27,6 +27,18 @@ Uses [Railpack](https://github.com/railwayapp/railpack) as a custom BuildKit fro
 
 If a `railpack.json` config file exists in the build context, it is used directly. Otherwise, `railpack prepare` is run to generate one automatically.
 
+#### Non-root builds
+
+By default, Railpack images run as root. Set `nonroot: true` to re-package the image so it runs as a non-root user (`railpack`, UID/GID 1000). This adds a second build stage that creates the user, copies the home directory, and sets `USER railpack`.
+
+```yaml
+build:
+  my-app:
+    type: railpack
+    context: ./my-app
+    nonroot: true
+```
+
 Requirements:
 
 - Docker with BuildKit support (same as Docker builder)
@@ -308,6 +320,7 @@ build:
   auto-detect:
     type: railpack
     context: ./my-app
+    nonroot: true # optional, run as non-root user (default: false)
 
   flake:
     type: nix
