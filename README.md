@@ -1,6 +1,6 @@
 # Steiger
 
-A container build orchestrator for multi-service projects with native support for Bazel, Docker BuildKit, and Ko. Steiger coordinates parallel builds and handles registry operations with automatic platform detection.
+A container build orchestrator for multi-service projects with native support for Bazel, Docker BuildKit, Ko, and Railpack. Steiger coordinates parallel builds and handles registry operations with automatic platform detection.
 
 ## Project Status
 
@@ -20,6 +20,17 @@ Requirements:
 
 - Docker with BuildKit support
 - `docker-container` driver (managed by Steiger)
+
+### Railpack
+
+Uses [Railpack](https://github.com/railwayapp/railpack) as a custom BuildKit frontend for automatic build plan generation. Railpack analyzes your application and generates an optimized build plan, which is then built using Docker BuildKit.
+
+If a `railpack.json` config file exists in the build context, it is used directly. Otherwise, `railpack prepare` is run to generate one automatically.
+
+Requirements:
+
+- Docker with BuildKit support (same as Docker builder)
+- `railpack` CLI
 
 ### Bazel
 
@@ -211,6 +222,7 @@ This nested structure allows you to:
 Steiger delegates caching to the underlying build systems rather than implementing its own cache layer:
 
 - **Docker BuildKit**: Leverages BuildKit's native layer caching and build cache
+- **Railpack**: Uses Docker BuildKit caching under the hood with Railpack's optimized build plans
 - **Bazel**: Uses Bazel's extensive caching system (action cache, remote cache, etc.)
 - **Ko**: Benefits from Go's build cache and Ko's layer caching
 - **Nix**: Utilizes Nix's content-addressed store and binary cache system for reproducible, cached builds
@@ -292,6 +304,10 @@ build:
   go-service:
     type: ko
     importPath: ./cmd/service
+
+  auto-detect:
+    type: railpack
+    context: ./my-app
 
   flake:
     type: nix

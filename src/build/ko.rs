@@ -1,4 +1,4 @@
-use std::{path::PathBuf, process::ExitStatus};
+use std::path::PathBuf;
 
 use async_tempfile::TempDir;
 use miette::Diagnostic;
@@ -7,7 +7,8 @@ use tokio::process::Command;
 use crate::{
     build::{Builder, Context, Output},
     config::Ko,
-    exec, image,
+    exec::{self, CommandError},
+    image,
 };
 
 #[derive(Debug, Diagnostic, thiserror::Error)]
@@ -21,8 +22,9 @@ pub enum KoError {
     #[error("failed to parse image")]
     #[diagnostic(transparent)]
     Image(#[from] image::ImageError),
-    #[error("failed to run 'ko build': {0}")]
-    Build(ExitStatus),
+    #[error("failed to run 'ko build'")]
+    #[diagnostic(transparent)]
+    Build(#[from] CommandError),
 }
 
 #[derive(Clone)]
@@ -45,45 +47,27 @@ impl Builder for KoBuilder {
 
     async fn build(
         self,
-        Context {
-            service_name,
-            platform,
-            mut progress,
-        }: Context,
+        ctx: &mut Context,
         input: Self::Input,
     ) -> Result<Output, Self::Error> {
-        progress.set_name(&service_name);
-        progress.info("starting builder");
-
-        let dest = TempDir::new_with_name(&service_name).await?;
-        let status = exec::run_with_progress(
+        let dest = TempDir::new_with_name(&ctx.service_name).await?;
+        exec::run_with_progress(
             Command::new(&self.binary)
                 .arg("build")
                 .arg("--push=false")
                 .arg("--platform")
-                .arg(&platform)
+                .arg(&ctx.platform)
                 .arg("--oci-layout-path")
                 .arg(dest.as_os_str())
                 .arg(input.import_path.as_deref().unwrap_or(".")),
-            progress.add_child(format!("{service_name} › ko")),
+            ctx.child_progress("ko"),
         )
         .await?;
-
-        if !status.success() {
-            progress.fail(format!(
-                "build failed with exit code: {}",
-                status.code().unwrap_or_default()
-            ));
-
-            return Err(KoError::Build(status));
-        }
-
-        progress.done("build finished".to_string());
 
         let images = image::load_from_path(dest).await?;
 
         Ok(Output {
-            artifacts: vec![(service_name, images)].into_iter().collect(),
+            artifacts: vec![(ctx.service_name.clone(), images)].into_iter().collect(),
         })
     }
 }

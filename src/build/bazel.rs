@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::PathBuf, process::ExitStatus};
+use std::{collections::HashMap, path::PathBuf};
 
 use miette::Diagnostic;
 use tokio::process::Command;
@@ -6,7 +6,7 @@ use tokio::process::Command;
 use crate::{
     build::{Builder, Context, Output},
     config::Bazel,
-    exec::{self, CmdBuilder, ExitError},
+    exec::{self, CmdBuilder, CommandError, ExitError},
     image,
 };
 
@@ -16,8 +16,9 @@ pub enum BazelError {
     Path(#[from] which::Error),
     #[error("IO error")]
     IO(#[from] std::io::Error),
-    #[error("failed to run 'bazel build': {0}")]
-    Build(ExitStatus),
+    #[error("failed to run 'bazel build'")]
+    #[diagnostic(transparent)]
+    Build(#[from] CommandError),
     #[error("failed to parse image")]
     #[diagnostic(transparent)]
     Image(#[from] image::ImageError),
@@ -88,42 +89,25 @@ impl Builder for BazelBuilder {
 
     async fn build(
         self,
-        Context {
-            service_name,
-            platform,
-            mut progress,
-        }: Context,
+        ctx: &mut Context,
         input: Self::Input,
     ) -> Result<Output, Self::Error> {
-        progress.set_name(&service_name);
-        progress.info("starting builder");
-
-        let bazel_platform = input.platforms.get(&platform);
+        let bazel_platform = input.platforms.get(&ctx.platform);
         let mut root_cmd = Command::new(&self.binary);
         let mut cmd = root_cmd.arg("build");
 
         if let Some(platform) = bazel_platform {
             cmd = cmd.arg(format!("--platforms={platform}"));
-            progress.info(format!("using platform: {platform}"));
+            ctx.progress.info(format!("using platform: {platform}"));
         }
 
-        let status = exec::run_with_progress(
+        exec::run_with_progress(
             cmd.args(input.targets.values()),
-            progress.add_child(format!("{service_name} › bazel")),
+            ctx.child_progress("bazel"),
         )
         .await?;
 
-        if !status.success() {
-            progress.fail(format!(
-                "build failed with exit code: {}",
-                status.code().unwrap_or_default()
-            ));
-
-            return Err(BazelError::Build(status));
-        }
-
-        progress.done("build finished".to_string());
-        progress.info("gathering output".to_string());
+        ctx.progress.info("gathering output".to_string());
 
         let cquery = self
             .get_files_output(bazel_platform, input.targets.values())

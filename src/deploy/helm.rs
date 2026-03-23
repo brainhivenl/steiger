@@ -1,4 +1,4 @@
-use std::{path::PathBuf, process::ExitStatus};
+use std::path::PathBuf;
 
 use heck::ToLowerCamelCase;
 use miette::Diagnostic;
@@ -7,7 +7,7 @@ use prodash::tree::Item;
 use crate::{
     config::Helm,
     deploy::{Context, Deployer},
-    exec::{self, CmdBuilder},
+    exec::{self, CmdBuilder, CommandError},
 };
 
 #[derive(Debug, Diagnostic, thiserror::Error)]
@@ -18,8 +18,9 @@ pub enum HelmError {
     Chart(#[from] std::io::Error),
     #[error("helm chart at '{0}' is not a directory")]
     NotADir(String),
-    #[error("failed to run 'helm upgrade': {0}")]
-    Install(ExitStatus),
+    #[error("failed to run 'helm upgrade'")]
+    #[diagnostic(transparent)]
+    Install(#[from] CommandError),
 }
 
 #[derive(Clone)]
@@ -65,7 +66,7 @@ impl HelmDeployer {
             cmd.flag("--values", file);
         }
 
-        let status = exec::run_with_progress(
+        exec::run_with_progress(
             cmd.arg("upgrade")
                 .arg("--install")
                 .arg(release)
@@ -73,15 +74,6 @@ impl HelmDeployer {
             progress.add_child(format!("{release} › helm")),
         )
         .await?;
-
-        if !status.success() {
-            progress.fail(format!(
-                "deployment failed with exit code: {}",
-                status.code().unwrap_or_default()
-            ));
-
-            return Err(HelmError::Install(status));
-        }
 
         Ok(())
     }

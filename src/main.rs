@@ -126,9 +126,15 @@ impl From<cmd::build::Error> for AppError {
     }
 }
 
+async fn resolve_platform(explicit: Option<String>) -> String {
+    match explicit {
+        Some(p) => p,
+        None => detect_platform().await,
+    }
+}
+
 async fn run(opts: Opts) -> Result<(), AppError> {
     let config_path = config::locate(opts.dir.as_ref(), opts.config.as_ref())?;
-    let detected_platform = detect_platform().await;
 
     if let Some(ref dir) = opts.dir {
         env::set_current_dir(dir).map_err(AppError::SetCurrentDir)?;
@@ -145,7 +151,7 @@ async fn run(opts: Opts) -> Result<(), AppError> {
 
             cmd::build::run(
                 config,
-                platform.unwrap_or(detected_platform),
+                resolve_platform(platform).await,
                 repo,
                 output_file.as_deref(),
             )
@@ -172,7 +178,7 @@ async fn run(opts: Opts) -> Result<(), AppError> {
 
             cmd::build::run(
                 config.clone(),
-                platform.unwrap_or(detected_platform),
+                resolve_platform(platform).await,
                 repo,
                 Some(dest.file_path()),
             )

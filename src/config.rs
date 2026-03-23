@@ -34,10 +34,11 @@ pub struct Bazel {
     pub platforms: HashMap<String, String>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct Docker {
+    #[serde(default)]
     pub context: String,
     pub dockerfile: Option<String>,
     #[serde(default)]
@@ -83,12 +84,20 @@ pub struct Nix {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+#[serde(rename_all = "camelCase")]
+pub struct Railpack {
+    pub context: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum Build {
     Ko(Ko),
     Bazel(Bazel),
     Docker(Docker),
     Nix(Nix),
+    Railpack(Railpack),
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

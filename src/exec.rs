@@ -1,7 +1,7 @@
 use std::{
     ffi::OsStr,
     ops::{Deref, DerefMut},
-    process::{ExitStatus, Stdio},
+    process::Stdio,
     sync::Arc,
 };
 
@@ -13,6 +13,16 @@ use tokio::{
 };
 
 use crate::progress;
+
+#[derive(Debug, Diagnostic, thiserror::Error)]
+pub enum CommandError {
+    #[error("IO error")]
+    IO(#[from] std::io::Error),
+    #[error("command failed with exit code {code}")]
+    Exit {
+        code: i32,
+    },
+}
 
 pub struct CmdBuilder(Command);
 
@@ -101,7 +111,7 @@ pub async fn spawn(cmd: &mut Command) -> Result<ChildWithStdio, std::io::Error> 
 pub async fn run_with_progress<P>(
     cmd: &mut Command,
     progress: P,
-) -> Result<ExitStatus, std::io::Error>
+) -> Result<(), CommandError>
 where
     P: Progress + 'static,
 {
@@ -111,7 +121,15 @@ where
     progress::proxy_stdio(child.stdout, Arc::clone(&progress));
     progress::proxy_stdio(child.stderr, Arc::clone(&progress));
 
-    child.inner.wait().await
+    let status = child.inner.wait().await?;
+
+    if !status.success() {
+        return Err(CommandError::Exit {
+            code: status.code().unwrap_or_default(),
+        });
+    }
+
+    Ok(())
 }
 
 #[derive(Debug, Diagnostic, thiserror::Error)]
