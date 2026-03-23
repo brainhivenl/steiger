@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use docker_credential::{CredentialRetrievalError, DockerCredential};
-use futures::{StreamExt, TryStreamExt, future, stream};
+use futures::{StreamExt, TryStreamExt, stream};
 use miette::Diagnostic;
 use oci_client::{
     Client, Reference,
@@ -104,24 +104,33 @@ impl Registry {
                     let digest = layer.sha256_digest();
 
                     if !client.blob_exists(image_ref, &digest).await? {
+                        let mut last_err = None;
+
                         for i in 1..5 {
                             match client
                                 .push_blob(image_ref, layer.data.clone(), &digest)
                                 .await
                             {
-                                Ok(_) => break,
+                                Ok(_) => {
+                                    last_err = None;
+                                    break;
+                                }
                                 // Retry on digest mismatch (400) and invalid range (416) errors.
                                 // Root cause unknown; we should probably look into this but retry is safe for now.
                                 // Retrying on 5xx server errors is also acceptable.
-                                Err(OciDistributionError::ServerError {
+                                Err(e @ OciDistributionError::ServerError {
                                     code: 400 | 416 | 500..599,
                                     ..
                                 }) => {
+                                    last_err = Some(e);
                                     tokio::time::sleep(Duration::from_secs(i * 2)).await;
-                                    continue;
                                 }
                                 Err(e) => return Err(e),
                             }
+                        }
+
+                        if let Some(e) = last_err {
+                            return Err(e);
                         }
                     }
 
@@ -132,7 +141,7 @@ impl Registry {
             })
             .boxed() // Workaround to rustc issue https://github.com/rust-lang/rust/issues/104382
             .buffer_unordered(16)
-            .try_for_each(future::ok::<(), OciDistributionError>)
+            .try_for_each(|()| async { Ok(()) })
             .await?;
 
         let config_url = self

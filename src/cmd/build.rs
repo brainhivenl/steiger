@@ -104,7 +104,7 @@ pub async fn run(
     {
         let response = client
             .create_build(&CreateBuildRequest { target, tags })
-            .await.unwrap();
+            .await?;
 
         build_id = Some(response.id);
     }

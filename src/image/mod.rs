@@ -62,17 +62,20 @@ pub async fn load_from_path(dir: impl AsRef<Path>) -> Result<Vec<Image>, ImageEr
     for entry in index.manifests {
         let manifest =
             serde_json::from_slice::<OciImageManifest>(&store.read_blob(&entry.digest).await?)?;
-        let mut layers = vec![];
 
-        for layer in manifest.layers.iter() {
-            let data = store.read_blob(&layer.digest).await?;
+        let layer_futures = manifest.layers.iter().map(|layer| {
+            let store = &store;
+            async move {
+                let data = store.read_blob(&layer.digest).await?;
+                Ok::<_, ImageError>(ImageLayer::new(
+                    data,
+                    layer.media_type.clone(),
+                    layer.annotations.clone(),
+                ))
+            }
+        });
 
-            layers.push(ImageLayer::new(
-                data,
-                layer.media_type.clone(),
-                layer.annotations.clone(),
-            ));
-        }
+        let layers = futures::future::try_join_all(layer_futures).await?;
 
         let digest = compute_digest(&manifest)?;
         let data = store.read_blob(&manifest.config.digest).await?;
