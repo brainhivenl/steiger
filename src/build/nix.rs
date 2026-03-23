@@ -342,27 +342,20 @@ impl Builder for NixBuilder {
 
     async fn build(
         self,
-        Context {
-            service_name,
-            platform,
-            mut progress,
-        }: Context,
+        ctx: &mut Context,
         input: Self::Input,
     ) -> Result<Output, Self::Error> {
-        progress.set_name(&service_name);
-        progress.info("starting builder".to_string());
-
         let mut set = JoinSet::default();
 
         self.eval(
-            progress.add_child("eval"),
+            ctx.progress.add_child("eval"),
             &mut set,
             &input,
-            &try_system(&platform)?,
+            &try_system(&ctx.platform)?,
         )
         .await?;
 
-        progress.done("evaluation finished".to_string());
+        ctx.progress.done("evaluation finished".to_string());
 
         let out_paths =
             set.join_all()
@@ -370,11 +363,11 @@ impl Builder for NixBuilder {
                 .into_iter()
                 .try_fold(OutPaths::new(), |mut acc, paths| {
                     acc.extend(paths?);
-                    progress.inc();
+                    ctx.progress.inc();
                     Ok::<_, NixError>(acc)
                 })?;
 
-        progress.done("finished building packages".to_string());
+        ctx.progress.done("finished building packages".to_string());
 
         let mut artifacts = HashMap::default();
 

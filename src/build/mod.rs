@@ -1,3 +1,6 @@
+use std::collections::HashMap;
+use std::fmt;
+
 use miette::Diagnostic;
 use prodash::tree::Item;
 use tokio::task::JoinSet;
@@ -52,7 +55,7 @@ impl Output {
 pub struct Context {
     pub service_name: String,
     pub platform: String,
-    pub progress: Item,
+    progress: Item,
 }
 
 impl Context {
@@ -63,41 +66,66 @@ impl Context {
             progress,
         }
     }
+
+    /// Create a child progress item for subprocess output.
+    pub fn child_progress(&mut self, label: &str) -> Item {
+        self.progress.add_child(format!("{} › {label}", self.service_name))
+    }
+
+    fn start(&mut self) {
+        self.progress.set_name(&self.service_name);
+        self.progress.info("starting builder");
+    }
+
+    fn done(&mut self) {
+        self.progress.done("build finished");
+    }
+
+    fn fail(&mut self, error: &impl fmt::Display) {
+        self.progress.fail(format!("{error}"));
+    }
 }
 
 pub trait Builder: Clone {
-    type Error;
+    type Error: fmt::Display;
     type Input;
 
     fn try_init() -> Result<Self, Self::Error>
     where
         Self: Sized;
-    async fn build(self, ctx: Context, input: Self::Input) -> Result<Output, Self::Error>;
+    async fn build(self, ctx: &mut Context, input: Self::Input) -> Result<Output, Self::Error>;
 }
 
 type ErrorOf<T> = <T as Builder>::Error;
 
-use std::collections::HashMap;
-
-fn run_builder<B>(
-    var: &mut Option<B>,
-    ctx: Context,
-    input: B::Input,
-) -> Result<impl Future<Output = Result<Output, BuildError>> + use<B>, BuildError>
+async fn run_builder<B>(builder: B, mut ctx: Context, input: B::Input) -> Result<Output, BuildError>
 where
     B: Builder,
     BuildError: From<<B as Builder>::Error>,
 {
-    let builder = match var.clone() {
+    ctx.start();
+
+    match builder.build(&mut ctx, input).await {
+        Ok(output) => {
+            ctx.done();
+            Ok(output)
+        }
+        Err(e) => {
+            ctx.fail(&e);
+            Err(e.into())
+        }
+    }
+}
+
+fn init_builder<B: Builder>(cache: &mut Option<B>) -> Result<B, B::Error> {
+    match cache.clone() {
         Some(builder) => Ok(builder),
         None => {
             let builder = B::try_init()?;
-            *var = Some(builder.clone());
+            *cache = Some(builder.clone());
             Ok(builder)
         }
-    }?;
-
-    Ok(async { Ok(builder.build(ctx, input).await?) })
+    }
 }
 
 pub struct MetaBuild {
@@ -131,16 +159,20 @@ impl MetaBuild {
 
             match build {
                 Build::Ko(ko) => {
-                    set.spawn(run_builder(&mut self.ko, ctx, ko)?);
+                    let builder = init_builder(&mut self.ko)?;
+                    set.spawn(run_builder(builder, ctx, ko));
                 }
                 Build::Bazel(bazel) => {
-                    set.spawn(run_builder(&mut self.bazel, ctx, bazel)?);
+                    let builder = init_builder(&mut self.bazel)?;
+                    set.spawn(run_builder(builder, ctx, bazel));
                 }
                 Build::Docker(docker) => {
-                    set.spawn(run_builder(&mut self.docker, ctx, docker)?);
+                    let builder = init_builder(&mut self.docker)?;
+                    set.spawn(run_builder(builder, ctx, docker));
                 }
                 Build::Nix(nix) => {
-                    set.spawn(run_builder(&mut self.nix, ctx, nix)?);
+                    let builder = init_builder(&mut self.nix)?;
+                    set.spawn(run_builder(builder, ctx, nix));
                 }
             };
         }

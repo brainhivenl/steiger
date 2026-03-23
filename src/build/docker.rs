@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::PathBuf, process::ExitStatus};
+use std::{collections::HashMap, path::PathBuf};
 
 use async_tempfile::TempDir;
 use miette::Diagnostic;
@@ -7,7 +7,7 @@ use tokio::process::Command;
 use crate::{
     build::{Builder, Context, Output},
     config::Docker,
-    exec::{self, CmdBuilder, ExitError},
+    exec::{self, CmdBuilder, CommandError, ExitError},
     image,
 };
 
@@ -30,8 +30,9 @@ pub enum DockerError {
     Image(#[from] image::ImageError),
     #[error("failed to parse buildkit output")]
     Serde(#[from] serde_json::Error),
-    #[error("failed to run 'docker build': {0}")]
-    Build(ExitStatus),
+    #[error("failed to run 'docker build'")]
+    #[diagnostic(transparent)]
+    Build(#[from] CommandError),
 }
 
 mod buildx {
@@ -100,36 +101,26 @@ impl Builder for DockerBuilder {
             .map_err(|e| e.into())
     }
 
-    async fn build(
-        self,
-        Context {
-            service_name,
-            platform,
-            mut progress,
-        }: Context,
-        input: Self::Input,
-    ) -> Result<Output, Self::Error> {
-        progress.set_name(&service_name);
-        progress.info("starting builder");
-
+    async fn build(self, ctx: &mut Context, input: Self::Input) -> Result<Output, Self::Error> {
         let builders = self.list_builders().await?;
 
         if !builders.iter().any(|b| b.name == "steiger") {
-            progress.info("creating buildkit builder");
+            ctx.progress.info("creating buildkit builder");
 
             match self.create_builder().await {
                 Err(DockerError::CreateBuilder(ExitError::Status { code: 1, stderr }))
                     if stderr.contains("ERROR: existing instance for") =>
                 {
-                    progress.info("buildkit builder exists, assuming remote driver");
+                    ctx.progress
+                        .info("buildkit builder exists, assuming remote driver");
                 }
                 Err(e) => return Err(e),
                 Ok(()) => {}
             }
 
-            progress.done("buildkit builder created");
+            ctx.progress.done("buildkit builder created");
         } else {
-            progress.info("using existing buildkit builder");
+            ctx.progress.info("using existing buildkit builder");
         }
 
         let mut cmd = CmdBuilder::new(&self.binary);
@@ -150,12 +141,12 @@ impl Builder for DockerBuilder {
             cmd.flag("--add-host", entry);
         }
 
-        let dest = TempDir::new_with_name(&service_name).await?;
-        let status = exec::run_with_progress(
+        let dest = TempDir::new_with_name(&ctx.service_name).await?;
+        exec::run_with_progress(
             cmd.arg("--builder")
                 .arg("steiger")
                 .arg("--platform")
-                .arg(&platform)
+                .arg(&ctx.platform)
                 .arg("--output")
                 .arg(format!(
                     "type=oci,dest={},tar=false",
@@ -169,25 +160,16 @@ impl Builder for DockerBuilder {
                         .unwrap_or(&format!("{}/Dockerfile", input.context)),
                 )
                 .arg(&input.context),
-            progress.add_child(format!("{service_name} › docker")),
+            ctx.child_progress("docker"),
         )
         .await?;
-
-        if !status.success() {
-            progress.fail(format!(
-                "build failed with exit code: {}",
-                status.code().unwrap_or_default()
-            ));
-
-            return Err(DockerError::Build(status));
-        }
-
-        progress.done("build finished".to_string());
 
         let images = image::load_from_path(dest).await?;
 
         Ok(Output {
-            artifacts: vec![(service_name, images)].into_iter().collect(),
+            artifacts: vec![(ctx.service_name.clone(), images)]
+                .into_iter()
+                .collect(),
         })
     }
 }
