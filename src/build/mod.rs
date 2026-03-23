@@ -8,17 +8,18 @@ use tokio::task::JoinSet;
 use crate::{
     build::{
         bazel::BazelBuilder, docker::DockerBuilder, ko::KoBuilder,
-        nix::NixBuilder,
+        nix::NixBuilder, railpack::RailpackBuilder,
     },
     config::{Build, Config},
     image::Image,
 };
 
 mod bazel;
-mod docker;
+pub(crate) mod docker;
 pub(crate) mod events;
 mod ko;
 mod nix;
+mod railpack;
 
 #[derive(Debug, Diagnostic, thiserror::Error)]
 pub enum BuildError {
@@ -34,6 +35,9 @@ pub enum BuildError {
     #[error("nix error")]
     #[diagnostic(transparent)]
     Nix(#[from] ErrorOf<NixBuilder>),
+    #[error("railpack error")]
+    #[diagnostic(transparent)]
+    Railpack(#[from] ErrorOf<RailpackBuilder>),
     #[error("build events error")]
     #[diagnostic(transparent)]
     Events(#[from] events::ClientError),
@@ -134,6 +138,7 @@ pub struct MetaBuild {
     bazel: Option<BazelBuilder>,
     docker: Option<DockerBuilder>,
     nix: Option<NixBuilder>,
+    railpack: Option<RailpackBuilder>,
 }
 
 impl MetaBuild {
@@ -144,6 +149,7 @@ impl MetaBuild {
             bazel: None,
             docker: None,
             nix: None,
+            railpack: None,
         }
     }
 
@@ -173,6 +179,10 @@ impl MetaBuild {
                 Build::Nix(nix) => {
                     let builder = init_builder(&mut self.nix)?;
                     set.spawn(run_builder(builder, ctx, nix));
+                }
+                Build::Railpack(rp) => {
+                    let builder = init_builder(&mut self.railpack)?;
+                    set.spawn(run_builder(builder, ctx, rp));
                 }
             };
         }
