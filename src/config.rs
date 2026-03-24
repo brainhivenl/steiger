@@ -47,6 +47,8 @@ pub struct Docker {
     pub hosts: HashMap<String, String>,
     #[serde(default)]
     pub target: Option<String>,
+    #[serde(default)]
+    pub args: Vec<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -87,6 +89,8 @@ pub struct Nix {
 #[serde(rename_all = "camelCase")]
 pub struct Railpack {
     pub context: String,
+    #[serde(default)]
+    pub nonroot: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

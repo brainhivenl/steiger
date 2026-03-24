@@ -19,6 +19,14 @@ use crate::{
 const RAILPACK_FRONTEND: &str = "ghcr.io/railwayapp/railpack-frontend";
 const RAILPACK_CONFIG: &str = "railpack.json";
 
+const DOCKERFILE: &str = r#"FROM base
+RUN groupadd -g 1000 railpack \
+    && useradd -u 1000 -g 1000 -d /home/railpack -s /bin/false railpack \
+    && cp -a /root/. /home/railpack \
+    && chown -R 1000:1000 /home/railpack /mise
+
+USER railpack"#;
+
 #[derive(Debug, Diagnostic, thiserror::Error)]
 pub enum RailpackError {
     #[error("failed to find railpack binary")]
@@ -73,15 +81,42 @@ impl Builder for RailpackBuilder {
         }
 
         let docker_input = Docker {
-            context: input.context,
+            context: input.context.clone(),
             dockerfile: Some(plan_out.to_string_lossy().into_owned()),
             build_args: HashMap::from([("BUILDKIT_SYNTAX".into(), RAILPACK_FRONTEND.into())]),
-            ..Default::default()
+            ..Docker::default()
         };
 
-        self.docker
-            .build(ctx, docker_input)
+        if !input.nonroot {
+            return Ok(self.docker.build(ctx, docker_input).await?);
+        }
+
+        ctx.progress.info("re-packaging image as non-root user");
+
+        let dest = self
+            .docker
+            .build_oci_layout(ctx, docker_input)
             .await
-            .map_err(RailpackError::Docker)
+            .map_err(RailpackError::Docker)?;
+
+        tokio::fs::write(dest.join("out.Dockerfile"), DOCKERFILE).await?;
+
+        let path = dest.to_str().unwrap_or_default();
+
+        Ok(self
+            .docker
+            .build(
+                ctx,
+                Docker {
+                    context: input.context,
+                    dockerfile: Some(format!("{path}/out.Dockerfile")),
+                    args: vec![
+                        "--build-context".to_string(),
+                        format!("base=oci-layout://{}", path),
+                    ],
+                    ..Docker::default()
+                },
+            )
+            .await?)
     }
 }

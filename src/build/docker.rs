@@ -86,22 +86,12 @@ impl DockerBuilder {
 
         Ok(())
     }
-}
 
-impl Builder for DockerBuilder {
-    type Error = DockerError;
-    type Input = Docker;
-
-    fn try_init() -> Result<Self, Self::Error>
-    where
-        Self: Sized,
-    {
-        which::which("docker")
-            .map(|binary| Self { binary })
-            .map_err(|e| e.into())
-    }
-
-    async fn build(self, ctx: &mut Context, input: Self::Input) -> Result<Output, Self::Error> {
+    pub async fn build_oci_layout(
+        &self,
+        ctx: &mut Context,
+        input: Docker,
+    ) -> Result<TempDir, DockerError> {
         let builders = self.list_builders().await?;
 
         if !builders.iter().any(|b| b.name == "steiger") {
@@ -141,6 +131,10 @@ impl Builder for DockerBuilder {
             cmd.flag("--add-host", entry);
         }
 
+        for arg in input.args {
+            cmd.arg(arg);
+        }
+
         let dest = TempDir::new_with_name(&ctx.service_name).await?;
         exec::run_with_progress(
             cmd.arg("--builder")
@@ -164,12 +158,35 @@ impl Builder for DockerBuilder {
         )
         .await?;
 
-        let images = image::load_from_path(dest).await?;
+        Ok(dest)
+    }
+
+    pub async fn finalize(&self, ctx: &Context, src: TempDir) -> Result<Output, DockerError> {
+        let images = image::load_from_path(src).await?;
 
         Ok(Output {
             artifacts: vec![(ctx.service_name.clone(), images)]
                 .into_iter()
                 .collect(),
         })
+    }
+}
+
+impl Builder for DockerBuilder {
+    type Error = DockerError;
+    type Input = Docker;
+
+    fn try_init() -> Result<Self, Self::Error>
+    where
+        Self: Sized,
+    {
+        which::which("docker")
+            .map(|binary| Self { binary })
+            .map_err(|e| e.into())
+    }
+
+    async fn build(self, ctx: &mut Context, input: Self::Input) -> Result<Output, Self::Error> {
+        let dest = self.build_oci_layout(ctx, input).await?;
+        self.finalize(ctx, dest).await
     }
 }

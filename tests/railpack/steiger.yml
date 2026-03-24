@@ -2,3 +2,4 @@ build:
   hello:
     type: railpack
     context: .
+    nonroot: true
