@@ -24,6 +24,8 @@ pub struct Config {
     pub default_repo: Option<String>,
     #[serde(default)]
     pub tag_format: String,
+    #[serde(default)]
+    pub use_monolithic_push: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

@@ -39,20 +39,27 @@ pub fn load_credentials(repo: &str) -> Result<RegistryAuth, CredentialRetrievalE
 #[derive(Clone)]
 pub struct Registry {
     client: Client,
+    use_monolithic_push: bool,
     auth: RegistryAuth,
 }
 
 impl Registry {
-    pub fn with_config(auth: RegistryAuth, insecure_registies: &[String]) -> Self {
+    pub fn with_config(
+        auth: RegistryAuth,
+        insecure_registies: &[String],
+        use_monolithic_push: bool,
+    ) -> Self {
         let config = ClientConfig {
             protocol: ClientProtocol::HttpsExcept(
                 [insecure_registies, &["localhost".to_string()]].concat(),
             ),
+            use_monolithic_push,
             ..ClientConfig::default()
         };
 
         Self {
             client: Client::new(config),
+            use_monolithic_push,
             auth,
         }
     }
@@ -91,6 +98,29 @@ impl Registry {
             }
         }
 
+        if self.use_monolithic_push {
+            progress.init(None, None);
+            progress.info("pushing image");
+
+            let image_urls = self
+                .client
+                .push(
+                    image_ref,
+                    &image.layers,
+                    image.config,
+                    &self.auth,
+                    image.manifest.into(),
+                )
+                .await?;
+
+            progress.done("image pushed");
+
+            return Ok(Some(PushResponse {
+                config_url: image_urls.config_url,
+                manifest_url: image_urls.manifest_url,
+            }));
+        }
+
         progress.init(Some(image.layers.len()), None);
         progress.info("pushing image");
 
@@ -118,10 +148,12 @@ impl Registry {
                                 // Retry on digest mismatch (400) and invalid range (416) errors.
                                 // Root cause unknown; we should probably look into this but retry is safe for now.
                                 // Retrying on 5xx server errors is also acceptable.
-                                Err(e @ OciDistributionError::ServerError {
-                                    code: 400 | 416 | 500..599,
-                                    ..
-                                }) => {
+                                Err(
+                                    e @ OciDistributionError::ServerError {
+                                        code: 400 | 416 | 500..599,
+                                        ..
+                                    },
+                                ) => {
                                     last_err = Some(e);
                                     tokio::time::sleep(Duration::from_secs(i * 2)).await;
                                 }
