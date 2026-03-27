@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use async_tempfile::TempDir;
 use miette::Diagnostic;
 use tokio::process::Command;
+use tracing::instrument;
 
 use crate::{
     build::{Builder, Context, Output},
@@ -45,6 +46,7 @@ impl Builder for KoBuilder {
             .map_err(|e| e.into())
     }
 
+    #[instrument(skip(self, ctx, input), fields(service = %ctx.service_name, platform = %ctx.platform), err(Debug))]
     async fn build(
         self,
         ctx: &mut Context,

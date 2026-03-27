@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use heck::ToLowerCamelCase;
 use miette::Diagnostic;
 use prodash::tree::Item;
+use tracing::instrument;
 
 use crate::{
     config::Helm,
@@ -29,6 +30,7 @@ pub struct HelmDeployer {
 }
 
 impl HelmDeployer {
+    #[instrument(skip(self, progress, ctx), fields(release), err(Debug))]
     async fn upgrade(
         &mut self,
         progress: &mut Item,

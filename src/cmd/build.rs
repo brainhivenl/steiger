@@ -4,6 +4,7 @@ use docker_credential::CredentialRetrievalError;
 use miette::Diagnostic;
 use oci_client::Reference;
 use tokio::{fs, task::JoinSet, time::Instant};
+use tracing::instrument;
 use steiger::git;
 
 use crate::{
@@ -80,6 +81,7 @@ fn find_image(mut images: Vec<Image>, platform: &str) -> Result<Image, Error> {
         .ok_or(Error::NoImage(platform.to_string()))
 }
 
+#[instrument(skip(config), fields(platform, repo), err(Debug))]
 pub async fn run(
     mut config: Config,
     platform: String,

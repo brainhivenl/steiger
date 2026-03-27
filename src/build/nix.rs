@@ -8,6 +8,7 @@ use std::{
 use aho_corasick::AhoCorasick;
 use miette::Diagnostic;
 use prodash::{Progress, tree::Item};
+use tracing::instrument;
 use serde::Deserialize;
 use serde_repr::Deserialize_repr;
 use tokio::{
@@ -234,6 +235,7 @@ pub struct NixBuilder {
 const IMAGE_OUTPUTS_PATH: &str = "steigerImages";
 
 impl NixBuilder {
+    #[instrument(skip(self, progress, set, input), fields(system), err(Debug))]
     async fn eval(
         &self,
         mut progress: Item,
@@ -293,6 +295,7 @@ impl NixBuilder {
         Ok(())
     }
 
+    #[instrument(skip(self), err(Debug))]
     async fn detect_output_systems(
         &self,
         flake_path: &str,
@@ -310,6 +313,7 @@ impl NixBuilder {
         Ok(serde_json::from_str(&stdout)?)
     }
 
+    #[instrument(skip(self), err(Debug))]
     async fn current_system(&self) -> Result<String, NixError> {
         let mut root_cmd = Command::new(self.nix_binary.as_os_str());
         let cmd = root_cmd
@@ -340,6 +344,7 @@ impl Builder for NixBuilder {
         })
     }
 
+    #[instrument(skip(self, ctx, input), fields(service = %ctx.service_name, platform = %ctx.platform), err(Debug))]
     async fn build(
         self,
         ctx: &mut Context,

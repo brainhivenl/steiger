@@ -4,6 +4,7 @@ use async_tempfile::TempFile;
 use clap::Parser;
 use miette::Diagnostic;
 use steiger::config;
+use tracing::instrument;
 
 mod build;
 mod cmd;
@@ -73,13 +74,15 @@ enum Cmd {
     },
 }
 
-async fn detect_kube_platform() -> Result<String, Box<dyn Error>> {
+#[instrument(err(Debug))]
+async fn detect_kube_platform() -> Result<String, Box<dyn Error + Send + Sync>> {
     let client = kube::Client::try_default().await?;
     let version = client.apiserver_version().await?;
 
     Ok(version.platform)
 }
 
+#[instrument]
 async fn detect_platform() -> String {
     if let Ok(platform) = detect_kube_platform().await {
         return platform;
@@ -126,6 +129,7 @@ impl From<cmd::build::Error> for AppError {
     }
 }
 
+#[instrument]
 async fn resolve_platform(explicit: Option<String>) -> String {
     match explicit {
         Some(p) => p,
@@ -133,6 +137,7 @@ async fn resolve_platform(explicit: Option<String>) -> String {
     }
 }
 
+#[instrument(skip(opts), err(Debug))]
 async fn run(opts: Opts) -> Result<(), AppError> {
     let config_path = config::locate(opts.dir.as_ref(), opts.config.as_ref())?;
 
@@ -195,6 +200,11 @@ async fn run(opts: Opts) -> Result<(), AppError> {
 
 #[tokio::main]
 async fn main() -> miette::Result<()> {
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .with_writer(std::io::stderr)
+        .init();
+
     let opts = Opts::parse();
     run(opts).await?;
 
