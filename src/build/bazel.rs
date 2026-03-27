@@ -2,6 +2,7 @@ use std::{collections::HashMap, path::PathBuf};
 
 use miette::Diagnostic;
 use tokio::process::Command;
+use tracing::instrument;
 
 use crate::{
     build::{Builder, Context, Output},
@@ -37,6 +38,7 @@ pub struct BazelBuilder {
 }
 
 impl BazelBuilder {
+    #[instrument(skip(self, targets), err(Debug))]
     pub async fn get_files_output(
         &self,
         platform: Option<&String>,
@@ -87,6 +89,7 @@ impl Builder for BazelBuilder {
             .map_err(|e| e.into())
     }
 
+    #[instrument(skip(self, ctx, input), fields(service = %ctx.service_name, platform = %ctx.platform), err(Debug))]
     async fn build(
         self,
         ctx: &mut Context,

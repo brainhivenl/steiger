@@ -1,6 +1,7 @@
 use std::{path::Path, sync::Arc};
 
 use miette::Diagnostic;
+use tracing::instrument;
 
 use crate::{
     cmd::build::output::Output,
@@ -35,6 +36,7 @@ async fn read_input(path: impl AsRef<Path>) -> Result<Output, InputError> {
     Ok(serde_json::from_slice(&content)?)
 }
 
+#[instrument(skip(config), err(Debug))]
 pub async fn run(config: Config, input_file: &Path) -> Result<(), Error> {
     let input = read_input(input_file).await?;
     let root = progress::tree();

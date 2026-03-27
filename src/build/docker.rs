@@ -3,6 +3,7 @@ use std::{collections::HashMap, path::PathBuf};
 use async_tempfile::TempDir;
 use miette::Diagnostic;
 use tokio::process::Command;
+use tracing::instrument;
 
 use crate::{
     build::{Builder, Context, Output},
@@ -57,6 +58,7 @@ pub struct DockerBuilder {
 }
 
 impl DockerBuilder {
+    #[instrument(skip(self), err(Debug))]
     async fn list_builders(&self) -> Result<Vec<buildx::Builder>, DockerError> {
         let output = exec::run_with_output(
             Command::new(&self.binary)
@@ -73,6 +75,7 @@ impl DockerBuilder {
             .collect::<Result<Vec<_>, _>>()?)
     }
 
+    #[instrument(skip(self), err(Debug))]
     async fn create_builder(&self) -> Result<(), DockerError> {
         exec::run_with_output(
             Command::new(&self.binary)
@@ -87,6 +90,7 @@ impl DockerBuilder {
         Ok(())
     }
 
+    #[instrument(skip(self, ctx, input), fields(service = %ctx.service_name, platform = %ctx.platform), err(Debug))]
     pub async fn build_oci_layout(
         &self,
         ctx: &mut Context,

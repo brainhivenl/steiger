@@ -6,6 +6,7 @@ use std::{
 use async_tempfile::TempDir;
 use miette::Diagnostic;
 use tokio::process::Command;
+use tracing::instrument;
 
 use crate::{
     build::{
@@ -59,6 +60,7 @@ impl Builder for RailpackBuilder {
         Ok(Self { binary, docker })
     }
 
+    #[instrument(skip(self, ctx, input), fields(service = %ctx.service_name, platform = %ctx.platform), err(Debug))]
     async fn build(self, ctx: &mut Context, input: Self::Input) -> Result<Output, Self::Error> {
         let tmp = TempDir::new().await?;
         let plan_out = tmp.as_ref().join(RAILPACK_CONFIG);

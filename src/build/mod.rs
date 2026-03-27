@@ -4,6 +4,7 @@ use std::fmt;
 use miette::Diagnostic;
 use prodash::tree::Item;
 use tokio::task::JoinSet;
+use tracing::instrument;
 
 use crate::{
     build::{
@@ -153,6 +154,7 @@ impl MetaBuild {
         }
     }
 
+    #[instrument(skip(self, pb), fields(platform), err(Debug))]
     pub async fn build(mut self, mut pb: Item, platform: &str) -> Result<Output, BuildError> {
         let mut set = JoinSet::default();
 

@@ -43,6 +43,8 @@ serde_yml = "0.0.12"
 sha2 = "0.10.9"
 subst = "0.3.8"
 thiserror = "2.0.15"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tokio = { version = "1.47.1", features = [
   "fs",
   "io-util",

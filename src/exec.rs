@@ -11,6 +11,7 @@ use tokio::{
     io::AsyncReadExt,
     process::{Child, ChildStderr, ChildStdout, Command},
 };
+use tracing::instrument;
 
 use crate::progress;
 
@@ -93,6 +94,8 @@ impl ChildWithStdio {
 }
 
 pub async fn spawn(cmd: &mut Command) -> Result<ChildWithStdio, std::io::Error> {
+    tracing::debug!(program = ?cmd.as_std().get_program(), args = ?cmd.as_std().get_args().collect::<Vec<_>>(), "executing command");
+
     let mut inner = cmd
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -108,6 +111,7 @@ pub async fn spawn(cmd: &mut Command) -> Result<ChildWithStdio, std::io::Error> 
     })
 }
 
+#[instrument(skip(cmd, progress), err(Debug))]
 pub async fn run_with_progress<P>(
     cmd: &mut Command,
     progress: P,
@@ -140,6 +144,7 @@ pub enum ExitError {
     Status { code: i32, stderr: String },
 }
 
+#[instrument(skip(cmd), err(Debug))]
 pub async fn run_with_output(cmd: &mut Command) -> Result<String, ExitError> {
     let mut child = spawn(cmd).await?;
     let status = child.inner.wait().await?;
