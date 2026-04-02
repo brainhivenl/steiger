@@ -81,46 +81,40 @@ impl Registry {
         }
     }
 
-    pub async fn push(
+    async fn monolithic_push(
         &mut self,
         mut progress: Item,
         image_ref: &Reference,
         image: Image,
     ) -> Result<Option<PushResponse>, PushError> {
-        let registry = image_ref.resolve_registry();
-        self.client.store_auth_if_needed(registry, &self.auth).await;
+        progress.init(None, None);
+        progress.info("pushing image");
 
-        if let Some(digest) = self.try_resolve_digest(&self.auth, image_ref).await? {
-            // If the digest matches the image's digest, we can skip pushing
-            if digest == image.digest {
-                progress.info("image already exists, skipping push");
-                return Ok(None);
-            }
-        }
+        let image_urls = self
+            .client
+            .push(
+                image_ref,
+                &image.layers,
+                image.config,
+                &self.auth,
+                image.manifest.into(),
+            )
+            .await?;
 
-        if self.use_monolithic_push {
-            progress.init(None, None);
-            progress.info("pushing image");
+        progress.done("image pushed");
 
-            let image_urls = self
-                .client
-                .push(
-                    image_ref,
-                    &image.layers,
-                    image.config,
-                    &self.auth,
-                    image.manifest.into(),
-                )
-                .await?;
+        Ok(Some(PushResponse {
+            config_url: image_urls.config_url,
+            manifest_url: image_urls.manifest_url,
+        }))
+    }
 
-            progress.done("image pushed");
-
-            return Ok(Some(PushResponse {
-                config_url: image_urls.config_url,
-                manifest_url: image_urls.manifest_url,
-            }));
-        }
-
+    async fn layered_push(
+        &mut self,
+        mut progress: Item,
+        image_ref: &Reference,
+        image: Image,
+    ) -> Result<Option<PushResponse>, PushError> {
         progress.init(Some(image.layers.len()), None);
         progress.info("pushing image");
 
@@ -191,5 +185,29 @@ impl Registry {
             config_url,
             manifest_url,
         }))
+    }
+
+    pub async fn push(
+        &mut self,
+        mut progress: Item,
+        image_ref: &Reference,
+        image: Image,
+    ) -> Result<Option<PushResponse>, PushError> {
+        let registry = image_ref.resolve_registry();
+        self.client.store_auth_if_needed(registry, &self.auth).await;
+
+        if let Some(digest) = self.try_resolve_digest(&self.auth, image_ref).await? {
+            // If the digest matches the image's digest, we can skip pushing
+            if digest == image.digest {
+                progress.info("image already exists, skipping push");
+                return Ok(None);
+            }
+        }
+
+        if self.use_monolithic_push {
+            return self.monolithic_push(progress, image_ref, image).await;
+        }
+
+        self.layered_push(progress, image_ref, image).await
     }
 }
