@@ -3,8 +3,8 @@ use std::{collections::HashMap, mem, path::Path};
 use docker_credential::CredentialRetrievalError;
 use miette::Diagnostic;
 use oci_client::Reference;
-use tokio::{fs, task::JoinSet, time::Instant};
 use steiger::git;
+use tokio::{fs, task::JoinSet, time::Instant};
 
 use crate::{
     build::{
@@ -89,6 +89,7 @@ pub async fn run(
     let root = progress::tree();
     let handle = progress::setup_line_renderer(&root);
     let insecure_registries = mem::take(&mut config.insecure_registries);
+    let use_monolithic_push = config.use_monolithic_push;
 
     let (tag, default_repo) = (config.tag_format.clone(), config.default_repo.take());
     let events = EventsClient::from_env();
@@ -119,7 +120,7 @@ pub async fn run(
     progress.init(Some(output.artifacts.len()), None);
 
     let auth = registry::load_credentials(&repo)?;
-    let registry = Registry::with_config(auth, &insecure_registries);
+    let registry = Registry::with_config(auth, &insecure_registries, use_monolithic_push);
     let mut artifacts = HashMap::new();
     let mut set = JoinSet::<Result<_, PushError>>::new();
 

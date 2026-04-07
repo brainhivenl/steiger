@@ -39,20 +39,27 @@ pub fn load_credentials(repo: &str) -> Result<RegistryAuth, CredentialRetrievalE
 #[derive(Clone)]
 pub struct Registry {
     client: Client,
+    use_monolithic_push: bool,
     auth: RegistryAuth,
 }
 
 impl Registry {
-    pub fn with_config(auth: RegistryAuth, insecure_registies: &[String]) -> Self {
+    pub fn with_config(
+        auth: RegistryAuth,
+        insecure_registies: &[String],
+        use_monolithic_push: bool,
+    ) -> Self {
         let config = ClientConfig {
             protocol: ClientProtocol::HttpsExcept(
                 [insecure_registies, &["localhost".to_string()]].concat(),
             ),
+            use_monolithic_push,
             ..ClientConfig::default()
         };
 
         Self {
             client: Client::new(config),
+            use_monolithic_push,
             auth,
         }
     }
@@ -74,23 +81,40 @@ impl Registry {
         }
     }
 
-    pub async fn push(
+    async fn monolithic_push(
         &mut self,
         mut progress: Item,
         image_ref: &Reference,
         image: Image,
     ) -> Result<Option<PushResponse>, PushError> {
-        let registry = image_ref.resolve_registry();
-        self.client.store_auth_if_needed(registry, &self.auth).await;
+        progress.init(None, None);
+        progress.info("pushing image");
 
-        if let Some(digest) = self.try_resolve_digest(&self.auth, image_ref).await? {
-            // If the digest matches the image's digest, we can skip pushing
-            if digest == image.digest {
-                progress.info("image already exists, skipping push");
-                return Ok(None);
-            }
-        }
+        let image_urls = self
+            .client
+            .push(
+                image_ref,
+                &image.layers,
+                image.config,
+                &self.auth,
+                image.manifest.into(),
+            )
+            .await?;
 
+        progress.done("image pushed");
+
+        Ok(Some(PushResponse {
+            config_url: image_urls.config_url,
+            manifest_url: image_urls.manifest_url,
+        }))
+    }
+
+    async fn layered_push(
+        &mut self,
+        mut progress: Item,
+        image_ref: &Reference,
+        image: Image,
+    ) -> Result<Option<PushResponse>, PushError> {
         progress.init(Some(image.layers.len()), None);
         progress.info("pushing image");
 
@@ -118,10 +142,12 @@ impl Registry {
                                 // Retry on digest mismatch (400) and invalid range (416) errors.
                                 // Root cause unknown; we should probably look into this but retry is safe for now.
                                 // Retrying on 5xx server errors is also acceptable.
-                                Err(e @ OciDistributionError::ServerError {
-                                    code: 400 | 416 | 500..599,
-                                    ..
-                                }) => {
+                                Err(
+                                    e @ OciDistributionError::ServerError {
+                                        code: 400 | 416 | 500..599,
+                                        ..
+                                    },
+                                ) => {
                                     last_err = Some(e);
                                     tokio::time::sleep(Duration::from_secs(i * 2)).await;
                                 }
@@ -159,5 +185,29 @@ impl Registry {
             config_url,
             manifest_url,
         }))
+    }
+
+    pub async fn push(
+        &mut self,
+        mut progress: Item,
+        image_ref: &Reference,
+        image: Image,
+    ) -> Result<Option<PushResponse>, PushError> {
+        let registry = image_ref.resolve_registry();
+        self.client.store_auth_if_needed(registry, &self.auth).await;
+
+        if let Some(digest) = self.try_resolve_digest(&self.auth, image_ref).await? {
+            // If the digest matches the image's digest, we can skip pushing
+            if digest == image.digest {
+                progress.info("image already exists, skipping push");
+                return Ok(None);
+            }
+        }
+
+        if self.use_monolithic_push {
+            return self.monolithic_push(progress, image_ref, image).await;
+        }
+
+        self.layered_push(progress, image_ref, image).await
     }
 }
