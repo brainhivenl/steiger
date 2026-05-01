@@ -70,7 +70,6 @@ Requirements
         };
 
         config.Cmd = ["/bin/hello"];
-        compressor = "none";
       };
     };
 
