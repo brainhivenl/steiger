@@ -162,7 +162,7 @@ async fn run(opts: Opts) -> Result<(), AppError> {
             input_file,
         } => {
             let config = config::load_from_path(profile.as_deref(), config_path).await?;
-            cmd::deploy::run(config, &input_file).await?;
+            cmd::deploy::run(profile.as_deref(), config, &input_file).await?;
         }
         Cmd::Run {
             profile,
@@ -186,7 +186,7 @@ async fn run(opts: Opts) -> Result<(), AppError> {
 
             dest.sync_all().await?;
 
-            cmd::deploy::run(config, dest.file_path()).await?;
+            cmd::deploy::run(profile.as_deref(), config, dest.file_path()).await?;
         }
     }
 

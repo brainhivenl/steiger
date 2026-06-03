@@ -26,6 +26,8 @@ pub struct Config {
     pub tag_format: String,
     #[serde(default)]
     pub use_monolithic_push: bool,
+    #[serde(default)]
+    pub context_mappings: HashMap<String, String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
