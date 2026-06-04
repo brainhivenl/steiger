@@ -68,11 +68,6 @@ pub struct CreateBuildResponse {
 #[derive(Debug, Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum Event {
-    Progress {
-        phase: String,
-        total: i64,
-        current: i64,
-    },
     Artifact {
         uri: String,
     },
