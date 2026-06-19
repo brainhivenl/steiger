@@ -1,0 +1,16 @@
+[package]
+name = "nix2oci"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "nix2oci"
+path = "main.rs"
+
+[dependencies]
+hex = { version = "0.4.3" }
+sha2 = { version = "0.10.9" }
+anyhow = { version = "1.0.102" }
+serde_json = { version = "1.0.149" }
+argh = { version = "0.1.14", default-features = false }
+oci-spec = { version = "0.9.0", default-features = false, features = ["image"] }
